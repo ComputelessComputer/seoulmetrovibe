@@ -2,29 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from './audio/AudioEngine';
 import { MapView } from './components/MapView';
 import { SidePanel } from './components/SidePanel';
+import { LINE_DISPLAY_NAMES } from './constants';
 import { fetchMetroData } from './data/metroData';
 import { fetchLivePositions } from './data/liveApi';
 import { advanceTrains, createDemoTrains, hydrateLiveTrains, renderTrains } from './simulation/trainEngine';
 import type { DataMode, Line, ThemeMode, Train, TrainRenderState } from './types';
 
 function getLineBadgeLabel(lineName: string): string {
-  const numberMatch = lineName.match(/^(\d+)호선$/);
-  if (numberMatch) {
-    return numberMatch[1];
-  }
-
-  const badgeMap: Record<string, string> = {
-    분당선: 'BD',
-    수인분당선: 'BD',
-    신분당선: 'SBD',
-    공항철도: 'AE',
-    경의중앙선: 'GJ',
-    경춘선: 'GC',
-    경강선: 'GK',
-    우이신설선: 'UI',
-  };
-
-  return badgeMap[lineName] ?? lineName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+  return LINE_DISPLAY_NAMES[lineName] ?? lineName;
 }
 
 function App() {

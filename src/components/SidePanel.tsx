@@ -69,28 +69,32 @@ export function SidePanel({
 }: SidePanelProps) {
   const selectedLine = selectedLineId ? lines.find((line) => line.id === selectedLineId) ?? null : null;
   const lineInfo = selectedLine ? LINE_INFO[selectedLine.name] : null;
+  const selectedLineLabel = selectedLine ? getBadgeLabel(selectedLine.name) : null;
 
   return (
     <div className="side-panel" aria-label="Line legend and line filters">
       <div className="side-panel-metric">{`${totalTrainCount} TRAINS IN MOTION`}</div>
       <div className="side-panel-grid">
-        {lines.map((line) => (
-          <button
-            key={line.id}
-            type="button"
-            className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
-              selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
-            }`}
-            title={line.name}
-            aria-label={`Solo ${line.name}`}
-            aria-pressed={selectedLineId === line.id}
-            onClick={() => onLineSelect(line.id)}
-          >
-            <span className="legend-badge" style={{ backgroundColor: line.color }} aria-hidden="true">
-              {getBadgeLabel(line.name)}
-            </span>
-          </button>
-        ))}
+        {lines.map((line) => {
+          const lineLabel = getBadgeLabel(line.name);
+          return (
+            <button
+              key={line.id}
+              type="button"
+              className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
+                selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
+              }`}
+              title={lineLabel}
+              aria-label={`${lineLabel}만 듣기`}
+              aria-pressed={selectedLineId === line.id}
+              onClick={() => onLineSelect(line.id)}
+            >
+              <span className="legend-badge" style={{ backgroundColor: line.color }} aria-hidden="true">
+                {lineLabel}
+              </span>
+            </button>
+          );
+        })}
       </div>
       <div className="side-panel-separator" aria-hidden="true" />
       <div className="side-panel-actions">
@@ -121,6 +125,7 @@ export function SidePanel({
         <div className={`side-panel-copy ${selectedLine ? 'is-visible' : 'is-hidden'}`}>
           {lineInfo ? (
             <>
+              <div className="side-panel-line-name">{selectedLineLabel}</div>
               <div className="side-panel-instrument">{lineInfo.instrument}</div>
               <p className="side-panel-description">{lineInfo.description}</p>
             </>

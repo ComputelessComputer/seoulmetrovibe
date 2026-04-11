@@ -74,6 +74,59 @@ export const LINE_INFO: Record<string, { instrument: string; description: string
     instrument: 'Clean Tone',
     description: 'Blue, to Incheon Airport. Unhurried, clear, departure.',
   },
+  경강선: {
+    instrument: 'Glass Piano',
+    description: 'A newer eastbound regional line out of Pangyo toward Icheon and Yeoju. More air, longer spacing, a wider horizon.',
+  },
+  경춘선: {
+    instrument: 'Acoustic Guitar',
+    description: 'The Seoul-to-Chuncheon corridor. More daylight, longer gaps, a commuter line that already feels like leaving the city.',
+  },
+  김포골드라인: {
+    instrument: 'Claves',
+    description: 'A compact automatic line feeding Gimpo into the airport network. Short stations, quick turns, relentless compression.',
+  },
+  서해선: {
+    instrument: 'Harmonium',
+    description: 'A west-side cross-regional line linking Goyang, Gimpo, Bucheon, Siheung, and Ansan. Long lateral motion, steady and broad.',
+  },
+  신림선: {
+    instrument: 'Marimba',
+    description: 'A rubber-tyred light metro through southwest Seoul. Tight stop spacing and fast pulses, built for dense neighborhood movement.',
+  },
+  용인에버라인: {
+    instrument: 'Toy Piano',
+    description: 'A driverless light line through Yongin connecting the Bundang corridor to Everland. Bright, synthetic, almost playful.',
+  },
+  우이신설선: {
+    instrument: 'Celesta',
+    description: 'A small northern Seoul light rail from Bukhansan Ui to Sinseol-dong. Short hops, cool air, precise bright notes.',
+  },
+  의정부경전철: {
+    instrument: 'Muted Trumpet',
+    description: 'A fully automatic light metro threading through Uijeongbu. Compact stations, quick bends, a clipped mechanical rhythm.',
+  },
+  '인천1호선': {
+    instrument: 'Electric Piano',
+    description: "Incheon's first subway spine, running north to south through the city's core. Blue, practical, and tidal.",
+  },
+  '인천2호선': {
+    instrument: 'Woodblock',
+    description: "Incheon's driverless east-west light metro. Faster openings, tighter curves, and a bright orange snap.",
+  },
+  GTXA: {
+    instrument: 'Synth Brass',
+    description: 'The first GTX express corridor, built for speed more than stop density. Fewer stations, harder acceleration, cleaner cuts.',
+  },
+};
+
+export const LINE_DISPLAY_NAMES: Record<string, string> = {
+  경의중앙선: '경의중앙',
+  김포골드라인: '김포골드',
+  수인분당선: '수인분당',
+  신분당선: '신분당',
+  우이신설선: '우이신설',
+  GTXA: '지티엑스 에이',
 };
 
 export const LINE_COLOR_OVERRIDES: Record<string, string> = {
