@@ -34,6 +34,15 @@ export function MapView({
   const trainLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const hasFitRef = useRef(false);
+  const ignoreNextMapClickRef = useRef(false);
+
+  function handleMapBackgroundClick() {
+    if (ignoreNextMapClickRef.current) {
+      ignoreNextMapClickRef.current = false;
+      return;
+    }
+    onClearSelection();
+  }
 
   function syncStationLayerVisibility() {
     const map = mapRef.current;
@@ -74,13 +83,11 @@ export function MapView({
     lineLayerRef.current = L.layerGroup().addTo(map);
     stationLayerRef.current = L.layerGroup().addTo(map);
     trainLayerRef.current = L.layerGroup().addTo(map);
-    map.on('click', onClearSelection);
     map.on('zoomend', syncStationLayerVisibility);
     mapRef.current = map;
     syncStationLayerVisibility();
 
     return () => {
-      map.off('click', onClearSelection);
       map.off('zoomend', syncStationLayerVisibility);
       map.remove();
       mapRef.current = null;
@@ -96,11 +103,11 @@ export function MapView({
       return;
     }
 
-    map.off('click', onClearSelection);
-    map.on('click', onClearSelection);
+    map.off('click', handleMapBackgroundClick);
+    map.on('click', handleMapBackgroundClick);
 
     return () => {
-      map.off('click', onClearSelection);
+      map.off('click', handleMapBackgroundClick);
     };
   }, [onClearSelection]);
 
@@ -128,26 +135,45 @@ export function MapView({
       const isDimmed = selectedLineId !== null && !isSelected;
       const branches = line.branches.length > 0 ? line.branches : [line.points];
       branches.forEach((branch) => {
-        const polyline = L.polyline(
-          branch.map((point) => [point.lat, point.lng] as [number, number]),
+        const latLngs = branch.map((point) => [point.lat, point.lng] as [number, number]);
+        const visibleLine = L.polyline(
+          latLngs,
           {
             color: line.color,
             weight: isSelected ? 4 : 2.5,
             opacity: isDimmed ? 0.15 : 0.9,
-            interactive: true,
-            bubblingMouseEvents: false,
+            interactive: false,
             className: `metro-line ${isSelected ? 'is-selected' : ''} ${isDimmed ? 'is-dimmed' : ''}`,
           },
         );
 
-        polyline.on('click', (event) => {
+        const hitArea = L.polyline(
+          latLngs,
+          {
+            color: line.color,
+            weight: Math.max(isSelected ? 16 : 14, (isSelected ? 4 : 2.5) + 10),
+            opacity: 0,
+            interactive: true,
+            bubblingMouseEvents: false,
+            className: 'metro-line-hit',
+          },
+        );
+
+        hitArea.on('click', (event) => {
+          ignoreNextMapClickRef.current = true;
           if (event.originalEvent) {
             L.DomEvent.stop(event.originalEvent);
           }
           onLineSelect(line.id);
         });
 
-        polyline.addTo(lineLayer);
+        visibleLine.addTo(lineLayer);
+        hitArea.addTo(lineLayer);
+
+        if (isSelected) {
+          visibleLine.bringToFront();
+          hitArea.bringToFront();
+        }
       });
 
       line.stations.forEach((station) => {
