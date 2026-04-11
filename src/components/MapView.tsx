@@ -75,15 +75,18 @@ export function MapView({ center, lines, theme, trains }: MapViewProps) {
     lineLayer.clearLayers();
 
     lines.forEach((line) => {
-      L.polyline(
-        line.points.map((point) => [point.lat, point.lng] as [number, number]),
-        {
-          color: line.color,
-          weight: 1.5,
-          opacity: 0.5,
-          interactive: false,
-        },
-      ).addTo(lineLayer);
+      const branches = line.branches.length > 0 ? line.branches : [line.points];
+      branches.forEach((branch) => {
+        L.polyline(
+          branch.map((point) => [point.lat, point.lng] as [number, number]),
+          {
+            color: line.color,
+            weight: 1.5,
+            opacity: 0.5,
+            interactive: false,
+          },
+        ).addTo(lineLayer);
+      });
     });
   }, [lines]);
 

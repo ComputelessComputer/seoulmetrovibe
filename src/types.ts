@@ -22,6 +22,7 @@ export interface Line {
   name: string;
   color: string;
   points: GeoPoint[];
+  branches: GeoPoint[][];
   stations: Station[];
   length: number;
 }
