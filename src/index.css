@@ -282,11 +282,7 @@ button {
   border: 0;
   background: transparent;
   cursor: pointer;
-  transition: opacity 0.3s ease, transform 0.3s ease, filter 0.3s ease, box-shadow 0.3s ease;
-}
-
-.legend-item.is-selected {
-  transform: scale(1.04);
+  transition: opacity 0.3s ease, filter 0.3s ease, box-shadow 0.3s ease;
 }
 
 .legend-item.is-dimmed {
