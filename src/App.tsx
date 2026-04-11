@@ -115,6 +115,7 @@ function App() {
   }, [dataMode, lines.length, trains.length]);
 
   const renderStates = useMemo<TrainRenderState[]>(() => renderTrains(lines, trains), [lines, trains]);
+  const linesById = useMemo(() => new Map(lines.map((line) => [line.id, line])), [lines]);
 
   useEffect(() => {
     if (renderStates.length === 0) {
@@ -122,22 +123,38 @@ function App() {
     }
 
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) {
+      return;
+    }
+
     const now = Date.now();
     const lineCounts = new Map<string, number>();
     renderStates.forEach((train) => {
       lineCounts.set(train.lineId, (lineCounts.get(train.lineId) ?? 0) + 1);
     });
 
+    const triggeredTrainIds = new Set(
+      renderStates
+        .filter((train) => {
+          const lastTrigger = lastNoteRef.current.get(train.id) ?? 0;
+          const interval = train.express ? 1200 : 1800;
+          return now - lastTrigger >= interval;
+        })
+        .map((train) => train.id),
+    );
+
+    if (triggeredTrainIds.size === 0) {
+      return;
+    }
+
     setTrains((current) =>
       current.map((train) => {
-        const lastTrigger = lastNoteRef.current.get(train.id) ?? 0;
-        const interval = train.express ? 1200 : 1800;
-        if (now - lastTrigger < interval) {
+        if (!triggeredTrainIds.has(train.id)) {
           return train;
         }
+
         lastNoteRef.current.set(train.id, now);
-        const line = lines.find((entry) => entry.id === train.lineId);
+        const line = linesById.get(train.lineId);
         if (line) {
           const density = (lineCounts.get(train.lineId) ?? 1) / Math.max(1, lines.length * 3);
           if (audioEnabled) {
@@ -150,7 +167,7 @@ function App() {
         };
       }),
     );
-  }, [audioEnabled, lines, renderStates]);
+  }, [audioEnabled, lines.length, linesById, renderStates]);
 
   const legendLines = useMemo(() => lines.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')), [lines]);
 

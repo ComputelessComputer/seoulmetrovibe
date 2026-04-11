@@ -68,9 +68,13 @@ export class AudioEngine {
     const duration = express ? '16n' : '8n';
     const note = getPitchForProgress(progress);
 
-    synth.connect(this.meter);
     if (synth instanceof Tone.PolySynth) {
-      synth.triggerAttackRelease([note, Tone.Frequency(note).transpose(7).toNote()], duration, undefined, velocity);
+      try {
+        const harmony = Tone.Frequency(note).transpose(7).toNote();
+        synth.triggerAttackRelease([note, harmony], duration, undefined, velocity);
+      } catch {
+        synth.triggerAttackRelease([note], duration, undefined, velocity);
+      }
       return;
     }
     synth.triggerAttackRelease(note, duration, undefined, velocity);
@@ -86,6 +90,7 @@ export class AudioEngine {
       instrumentFactories[lineName] ??
       fallbackFactories[this.fallbackIndex++ % fallbackFactories.length];
     const instrument = create();
+    instrument.connect(this.meter);
     this.instruments.set(lineName, instrument);
     return instrument;
   }
