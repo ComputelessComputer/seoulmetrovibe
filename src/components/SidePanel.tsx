@@ -74,29 +74,45 @@ export function SidePanel({
   return (
     <div className="side-panel" aria-label="Line legend and line filters">
       <div className="side-panel-metric">{`${totalTrainCount} TRAINS IN MOTION`}</div>
-      <div className="side-panel-grid">
-        {lines.map((line) => {
-          const lineLabel = getBadgeLabel(line.name);
-          return (
-            <button
-              key={line.id}
-              type="button"
-              className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
-                selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
-              }`}
-              title={lineLabel}
-              aria-label={`${lineLabel}만 듣기`}
-              aria-pressed={selectedLineId === line.id}
-              onClick={() => onLineSelect(line.id)}
-            >
-              <span className="legend-badge" style={{ backgroundColor: line.color }} aria-hidden="true">
-                {lineLabel}
-              </span>
-            </button>
-          );
-        })}
+      <div className="side-panel-scroll">
+        <div className="side-panel-grid">
+          {lines.map((line) => {
+            const lineLabel = getBadgeLabel(line.name);
+            return (
+              <button
+                key={line.id}
+                type="button"
+                className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
+                  selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
+                }`}
+                title={lineLabel}
+                aria-label={`${lineLabel}만 듣기`}
+                aria-pressed={selectedLineId === line.id}
+                onClick={() => onLineSelect(line.id)}
+              >
+                <span className="legend-badge" style={{ backgroundColor: line.color }} aria-hidden="true">
+                  {lineLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="side-panel-separator" aria-hidden="true" />
+        <div className="side-panel-context" aria-live="polite">
+          <div className={`side-panel-copy ${selectedLine ? 'is-hidden' : 'is-visible'}`}>
+            <p className="side-panel-description">{DEFAULT_DESCRIPTION}</p>
+          </div>
+          <div className={`side-panel-copy ${selectedLine ? 'is-visible' : 'is-hidden'}`}>
+            {lineInfo ? (
+              <>
+                <div className="side-panel-line-name">{selectedLineLabel}</div>
+                <div className="side-panel-instrument">{lineInfo.instrument}</div>
+                <p className="side-panel-description">{lineInfo.description}</p>
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
-      <div className="side-panel-separator" aria-hidden="true" />
       <div className="side-panel-actions">
         <button
           type="button"
@@ -117,20 +133,6 @@ export function SidePanel({
         >
           <GitHubIcon />
         </a>
-      </div>
-      <div className="side-panel-context" aria-live="polite">
-        <div className={`side-panel-copy ${selectedLine ? 'is-hidden' : 'is-visible'}`}>
-          <p className="side-panel-description">{DEFAULT_DESCRIPTION}</p>
-        </div>
-        <div className={`side-panel-copy ${selectedLine ? 'is-visible' : 'is-hidden'}`}>
-          {lineInfo ? (
-            <>
-              <div className="side-panel-line-name">{selectedLineLabel}</div>
-              <div className="side-panel-instrument">{lineInfo.instrument}</div>
-              <p className="side-panel-description">{lineInfo.description}</p>
-            </>
-          ) : null}
-        </div>
       </div>
     </div>
   );
