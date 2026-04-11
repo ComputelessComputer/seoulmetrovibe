@@ -27,6 +27,15 @@ function getLineBadgeLabel(lineName: string): string {
   return badgeMap[lineName] ?? lineName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
 }
 
+function getSelectedLineLabel(lineName: string): string {
+  const numberMatch = lineName.match(/^(\d+)호선$/);
+  if (numberMatch) {
+    return `LINE ${numberMatch[1]}`;
+  }
+
+  return lineName.toUpperCase();
+}
+
 function App() {
   const [lines, setLines] = useState<Line[]>([]);
   const [trains, setTrains] = useState<Train[]>([]);
@@ -244,33 +253,41 @@ function App() {
         />
       )}
 
-      <div className="top-left-legend">
-        {legendLines.map((line) => (
-          <button
-            key={line.id}
-            type="button"
-            className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
-              selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
-            }`}
-            title={line.name}
-            aria-label={`Listen to ${line.name}`}
-            aria-pressed={selectedLineId === line.id}
-            onClick={() => handleLineToggle(line.id)}
-          >
-            <span
-              className="legend-badge"
-              style={{ backgroundColor: line.color }}
-              aria-hidden="true"
+      <div className="side-panel" aria-label="Line legend and line filters">
+        <div className="side-panel-metric">{`${renderStates.length} TRAINS IN MOTION`}</div>
+        <div className="side-panel-grid">
+          {legendLines.map((line) => (
+            <button
+              key={line.id}
+              type="button"
+              className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
+                selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
+              }`}
+              title={line.name}
+              aria-label={`Solo ${line.name}`}
+              aria-pressed={selectedLineId === line.id}
+              onClick={() => handleLineToggle(line.id)}
             >
-              {getLineBadgeLabel(line.name)}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="top-center-status">
-        <span className="live-dot" />
-        <span>{renderStates.length} trains running</span>
+              <span
+                className="legend-badge"
+                style={{ backgroundColor: line.color }}
+                aria-hidden="true"
+              >
+                {getLineBadgeLabel(line.name)}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="side-panel-separator" aria-hidden="true" />
+        {selectedLine ? (
+          <div className="side-panel-metric" aria-live="polite">
+            {`${getSelectedLineLabel(selectedLine.name)} · ${selectedLineTrainCount} TRAINS`}
+          </div>
+        ) : (
+          <div className="side-panel-metric side-panel-metric-empty" aria-hidden="true">
+            SELECT A LINE
+          </div>
+        )}
       </div>
 
       <div className="bottom-center-controls">
@@ -317,12 +334,6 @@ function App() {
           </svg>
         </button>
       </div>
-
-      {selectedLine ? (
-        <div className="bottom-center-selection" aria-live="polite">
-          {`You are hearing ${selectedLine.name}. ${selectedLineTrainCount} trains, one instrument.`}
-        </div>
-      ) : null}
 
       {error ? <div className="sr-only">{error}</div> : null}
       {dataMode === 'live' ? <div className="sr-only">Live mode</div> : null}
