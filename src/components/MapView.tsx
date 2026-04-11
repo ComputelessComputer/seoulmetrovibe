@@ -135,12 +135,15 @@ export function MapView({
             weight: isSelected ? 4 : 2.5,
             opacity: isDimmed ? 0.15 : 0.9,
             interactive: true,
+            bubblingMouseEvents: false,
             className: `metro-line ${isSelected ? 'is-selected' : ''} ${isDimmed ? 'is-dimmed' : ''}`,
           },
         );
 
         polyline.on('click', (event) => {
-          L.DomEvent.stopPropagation(event);
+          if (event.originalEvent) {
+            L.DomEvent.stop(event.originalEvent);
+          }
           onLineSelect(line.id);
         });
 
