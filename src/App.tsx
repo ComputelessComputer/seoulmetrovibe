@@ -30,6 +30,7 @@ function getLineBadgeLabel(lineName: string): string {
 function App() {
   const [lines, setLines] = useState<Line[]>([]);
   const [trains, setTrains] = useState<Train[]>([]);
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('map');
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
   const [dataMode, setDataMode] = useState<DataMode>('demo');
@@ -144,6 +145,11 @@ function App() {
 
   const renderStates = useMemo<TrainRenderState[]>(() => renderTrains(lines, trains), [lines, trains]);
   const linesById = useMemo(() => new Map(lines.map((line) => [line.id, line])), [lines]);
+  const selectedLine = selectedLineId ? linesById.get(selectedLineId) ?? null : null;
+  const selectedLineTrainCount = useMemo(
+    () => (selectedLineId ? renderStates.filter((train) => train.lineId === selectedLineId).length : 0),
+    [renderStates, selectedLineId],
+  );
 
   useEffect(() => {
     if (renderStates.length === 0) {
@@ -173,7 +179,7 @@ function App() {
     pulsingTrains.forEach((train) => {
       handledPulseRef.current.set(train.id, train.pulseUntil);
       const line = linesById.get(train.lineId);
-      if (!line || !audioEnabled) {
+      if (!line || !audioEnabled || (selectedLineId !== null && train.lineId !== selectedLineId)) {
         return;
       }
 
@@ -184,7 +190,7 @@ function App() {
         console.error(`Audio playback crashed for ${train.id}.`, error);
       }
     });
-  }, [audioEnabled, lines.length, linesById, renderStates]);
+  }, [audioEnabled, lines.length, linesById, renderStates, selectedLineId]);
 
   const legendLines = useMemo(() => lines.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')), [lines]);
 
@@ -209,17 +215,48 @@ function App() {
     );
   }
 
+  function handleLineToggle(lineId: string) {
+    setSelectedLineId((current) => (current === lineId ? null : lineId));
+  }
+
+  function handleLineClear() {
+    setSelectedLineId(null);
+  }
+
   return (
     <div className="app-shell">
       {viewMode === 'map' ? (
-        <MapView center={mapCenter} lines={lines} theme={themeMode} trains={renderStates} />
+        <MapView
+          center={mapCenter}
+          lines={lines}
+          onClearSelection={handleLineClear}
+          onLineSelect={handleLineToggle}
+          selectedLineId={selectedLineId}
+          theme={themeMode}
+          trains={renderStates}
+        />
       ) : (
-        <BarsView lines={legendLines} trains={renderStates} />
+        <BarsView
+          lines={legendLines}
+          onLineSelect={handleLineToggle}
+          selectedLineId={selectedLineId}
+          trains={renderStates}
+        />
       )}
 
       <div className="top-left-legend">
         {legendLines.map((line) => (
-          <span key={line.id} className="legend-item" title={line.name}>
+          <button
+            key={line.id}
+            type="button"
+            className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
+              selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
+            }`}
+            title={line.name}
+            aria-label={`Listen to ${line.name}`}
+            aria-pressed={selectedLineId === line.id}
+            onClick={() => handleLineToggle(line.id)}
+          >
             <span
               className="legend-badge"
               style={{ backgroundColor: line.color }}
@@ -227,7 +264,7 @@ function App() {
             >
               {getLineBadgeLabel(line.name)}
             </span>
-          </span>
+          </button>
         ))}
       </div>
 
@@ -280,6 +317,12 @@ function App() {
           </svg>
         </button>
       </div>
+
+      {selectedLine ? (
+        <div className="bottom-center-selection" aria-live="polite">
+          {`You are hearing ${selectedLine.name}. ${selectedLineTrainCount} trains, one instrument.`}
+        </div>
+      ) : null}
 
       {error ? <div className="sr-only">{error}</div> : null}
       {dataMode === 'live' ? <div className="sr-only">Live mode</div> : null}

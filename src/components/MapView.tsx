@@ -6,6 +6,9 @@ import type { GeoPoint, Line, ThemeMode, TrainRenderState } from '../types';
 interface MapViewProps {
   center?: GeoPoint | null;
   lines: Line[];
+  onClearSelection: () => void;
+  onLineSelect: (lineId: string) => void;
+  selectedLineId: string | null;
   theme: ThemeMode;
   trains: TrainRenderState[];
 }
@@ -16,7 +19,15 @@ const TILE_URLS: Record<ThemeMode, string> = {
   light: 'https://{s}.basemaps.cartocdn.com/positron/{z}/{x}/{y}{r}.png',
 };
 
-export function MapView({ center, lines, theme, trains }: MapViewProps) {
+export function MapView({
+  center,
+  lines,
+  onClearSelection,
+  onLineSelect,
+  selectedLineId,
+  theme,
+  trains,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lineLayerRef = useRef<L.LayerGroup | null>(null);
@@ -41,14 +52,30 @@ export function MapView({ center, lines, theme, trains }: MapViewProps) {
 
     lineLayerRef.current = L.layerGroup().addTo(map);
     trainLayerRef.current = L.layerGroup().addTo(map);
+    map.on('click', onClearSelection);
     mapRef.current = map;
 
     return () => {
+      map.off('click', onClearSelection);
       map.remove();
       mapRef.current = null;
       tileLayerRef.current = null;
     };
-  }, [theme]);
+  }, [onClearSelection, theme]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    map.off('click', onClearSelection);
+    map.on('click', onClearSelection);
+
+    return () => {
+      map.off('click', onClearSelection);
+    };
+  }, [onClearSelection]);
 
   useEffect(() => {
     const tileLayer = tileLayerRef.current;
@@ -75,20 +102,30 @@ export function MapView({ center, lines, theme, trains }: MapViewProps) {
     lineLayer.clearLayers();
 
     lines.forEach((line) => {
+      const isSelected = selectedLineId === line.id;
+      const isDimmed = selectedLineId !== null && !isSelected;
       const branches = line.branches.length > 0 ? line.branches : [line.points];
       branches.forEach((branch) => {
-        L.polyline(
+        const polyline = L.polyline(
           branch.map((point) => [point.lat, point.lng] as [number, number]),
           {
             color: line.color,
-            weight: 2.5,
-            opacity: 0.85,
-            interactive: false,
+            weight: isSelected ? 4 : 2.5,
+            opacity: isDimmed ? 0.15 : 0.9,
+            interactive: true,
+            className: `metro-line ${isSelected ? 'is-selected' : ''} ${isDimmed ? 'is-dimmed' : ''}`,
           },
-        ).addTo(lineLayer);
+        );
+
+        polyline.on('click', (event) => {
+          L.DomEvent.stopPropagation(event);
+          onLineSelect(line.id);
+        });
+
+        polyline.addTo(lineLayer);
       });
     });
-  }, [lines]);
+  }, [lines, onLineSelect, selectedLineId]);
 
   useEffect(() => {
     const trainLayer = trainLayerRef.current;
@@ -100,18 +137,19 @@ export function MapView({ center, lines, theme, trains }: MapViewProps) {
     const now = Date.now();
     trains.forEach((train) => {
       const pulsing = train.pulseUntil > now;
+      const isDimmed = selectedLineId !== null && train.lineId !== selectedLineId;
       L.circleMarker([train.point.lat, train.point.lng], {
         radius: pulsing ? 6.5 : 5,
         color: lines.find((line) => line.id === train.lineId)?.color ?? '#333333',
         fillColor: lines.find((line) => line.id === train.lineId)?.color ?? '#333333',
-        fillOpacity: 1,
+        fillOpacity: isDimmed ? 0.35 : 1,
         weight: pulsing ? 2 : 1,
-        opacity: 1,
+        opacity: isDimmed ? 0.35 : 1,
         className: pulsing ? 'train-marker is-pulsing' : 'train-marker',
         interactive: false,
       }).addTo(trainLayer);
     });
-  }, [lines, trains]);
+  }, [lines, selectedLineId, trains]);
 
   return <div ref={containerRef} className="map-root" />;
 }

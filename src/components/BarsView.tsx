@@ -3,16 +3,32 @@ import type { Line, TrainRenderState } from '../types';
 
 interface BarsViewProps {
   lines: Line[];
+  onLineSelect: (lineId: string) => void;
+  selectedLineId: string | null;
   trains: TrainRenderState[];
 }
 
-export function BarsView({ lines, trains }: BarsViewProps) {
+export function BarsView({ lines, onLineSelect, selectedLineId, trains }: BarsViewProps) {
   return (
     <div className="bars-root">
       {lines.map((line) => {
         const lineTrains = trains.filter((train) => train.lineId === line.id);
+        const isSelected = selectedLineId === line.id;
+        const isDimmed = selectedLineId !== null && !isSelected;
         return (
-          <div key={line.id} className="bar-line">
+          <button
+            key={line.id}
+            type="button"
+            className={`bar-line ${isSelected ? 'is-selected' : ''} ${isDimmed ? 'is-dimmed' : ''}`}
+            onClick={() => onLineSelect(line.id)}
+            aria-pressed={isSelected}
+          >
+            <div className="bar-line-meta">
+              <span className="bar-line-name" style={{ color: line.color }}>
+                {line.name}
+              </span>
+              <span className="bar-line-subtitle">{lineTrains.length} trains in motion</span>
+            </div>
             <div className="bar-track-wrap">
               <div
                 className="bar-track"
@@ -37,7 +53,7 @@ export function BarsView({ lines, trains }: BarsViewProps) {
             <div className="bar-count" style={{ color: line.color }}>
               {lineTrains.length}
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
