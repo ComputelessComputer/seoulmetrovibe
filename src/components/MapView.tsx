@@ -88,7 +88,8 @@ export function MapView({
       tileLayerRef.current = null;
       stationLayerRef.current = null;
     };
-  }, [onClearSelection, theme]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // init once only — theme changes handled by separate effect
 
   useEffect(() => {
     const map = mapRef.current;
