@@ -37,6 +37,7 @@ function App() {
   const [dataMode, setDataMode] = useState<DataMode>('demo');
   const [error, setError] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<AudioEngine | null>(null);
   const frameRef = useRef<number | null>(null);
   const previousTimeRef = useRef<number>(0);
@@ -44,13 +45,20 @@ function App() {
 
   useEffect(() => {
     audioRef.current = new AudioEngine();
+    audioRef.current.setMuted(isMuted);
     return () => {
       audioRef.current?.dispose();
       if (frameRef.current !== null) {
         cancelAnimationFrame(frameRef.current);
       }
     };
+  // init once only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    audioRef.current?.setMuted(isMuted);
+  }, [isMuted]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
@@ -206,6 +214,10 @@ function App() {
     setSelectedLineId(null);
   }
 
+  function handleMuteToggle() {
+    setIsMuted((current) => !current);
+  }
+
   return (
     <div className="app-shell">
       <MapView
@@ -221,6 +233,8 @@ function App() {
         getBadgeLabel={getLineBadgeLabel}
         lines={legendLines}
         onLineSelect={handleLineToggle}
+        onToggleMute={handleMuteToggle}
+        muted={isMuted}
         selectedLineId={selectedLineId}
         totalTrainCount={renderStates.length}
       />

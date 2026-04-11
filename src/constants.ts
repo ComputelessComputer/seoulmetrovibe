@@ -7,6 +7,7 @@ export const STATIONS_URL =
   'https://raw.githubusercontent.com/sudo-happy/data-archive/main/metro/station/data-metro-station-1.0.0.json';
 export const LINES_URL =
   'https://raw.githubusercontent.com/sudo-happy/data-archive/main/metro/line/data-metro-line-1.0.0.json';
+export const GITHUB_REPO_URL = 'https://github.com/ComputelessComputer/seoulmetrovibe';
 
 export const LIVE_API_KEY = 'YOUR_API_KEY';
 export const LIVE_API_BASE =

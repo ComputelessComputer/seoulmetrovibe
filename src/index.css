@@ -177,6 +177,45 @@ button {
   background: linear-gradient(90deg, transparent 0%, var(--side-panel-separator) 18%, var(--side-panel-separator) 82%, transparent 100%);
 }
 
+.side-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.side-panel-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-strong);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.side-panel-icon-button:hover {
+  transform: translateY(-1px);
+  background: var(--button-active-bg);
+  border-color: var(--side-panel-ring);
+}
+
+.side-panel-icon-button:focus-visible {
+  outline: 2px solid var(--text-strong);
+  outline-offset: 2px;
+}
+
+.side-panel-icon-button svg {
+  width: 15px;
+  height: 15px;
+}
+
 .side-panel-context {
   position: relative;
   min-height: 98px;
@@ -300,6 +339,15 @@ button {
   .side-panel-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 6px;
+  }
+
+  .side-panel-actions {
+    gap: 6px;
+  }
+
+  .side-panel-icon-button {
+    width: 28px;
+    height: 28px;
   }
 
   .legend-badge {
