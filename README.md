@@ -1,4 +1,4 @@
-# Seoul Metro Jazz
+# Seoul Metro Vibe
 
 Every train is a note. Every line is an instrument.
 
