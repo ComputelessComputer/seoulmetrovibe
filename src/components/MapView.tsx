@@ -18,6 +18,7 @@ const TILE_URLS: Record<ThemeMode, string> = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
   light: 'https://{s}.basemaps.cartocdn.com/positron/{z}/{x}/{y}{r}.png',
 };
+const STATION_DOTS_MIN_ZOOM = 11;
 
 export function MapView({
   center,
@@ -31,8 +32,29 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lineLayerRef = useRef<L.LayerGroup | null>(null);
+  const stationLayerRef = useRef<L.LayerGroup | null>(null);
   const trainLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  function syncStationLayerVisibility() {
+    const map = mapRef.current;
+    const stationLayer = stationLayerRef.current;
+    if (!map || !stationLayer) {
+      return;
+    }
+
+    const shouldShowStations = map.getZoom() >= STATION_DOTS_MIN_ZOOM;
+    const hasStationLayer = map.hasLayer(stationLayer);
+
+    if (shouldShowStations && !hasStationLayer) {
+      stationLayer.addTo(map);
+      return;
+    }
+
+    if (!shouldShowStations && hasStationLayer) {
+      map.removeLayer(stationLayer);
+    }
+  }
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -51,15 +73,20 @@ export function MapView({
     }).addTo(map);
 
     lineLayerRef.current = L.layerGroup().addTo(map);
+    stationLayerRef.current = L.layerGroup().addTo(map);
     trainLayerRef.current = L.layerGroup().addTo(map);
     map.on('click', onClearSelection);
+    map.on('zoomend', syncStationLayerVisibility);
     mapRef.current = map;
+    syncStationLayerVisibility();
 
     return () => {
       map.off('click', onClearSelection);
+      map.off('zoomend', syncStationLayerVisibility);
       map.remove();
       mapRef.current = null;
       tileLayerRef.current = null;
+      stationLayerRef.current = null;
     };
   }, [onClearSelection, theme]);
 
@@ -95,11 +122,15 @@ export function MapView({
   }, [center]);
 
   useEffect(() => {
+    const map = mapRef.current;
     const lineLayer = lineLayerRef.current;
-    if (!lineLayer) {
+    const stationLayer = stationLayerRef.current;
+    if (!map || !lineLayer || !stationLayer) {
       return;
     }
+
     lineLayer.clearLayers();
+    stationLayer.clearLayers();
 
     lines.forEach((line) => {
       const isSelected = selectedLineId === line.id;
@@ -124,7 +155,28 @@ export function MapView({
 
         polyline.addTo(lineLayer);
       });
+
+      line.stations.forEach((station) => {
+        L.circleMarker([station.lat, station.lng], {
+          radius: 2,
+          fillColor: line.color,
+          fillOpacity: isDimmed ? 0.15 : 0.5,
+          stroke: false,
+          interactive: false,
+        }).addTo(stationLayer);
+      });
     });
+
+    syncStationLayerVisibility();
+
+    const stationPoints = lines.flatMap((line) =>
+      line.stations.map((station) => [station.lat, station.lng] as [number, number]),
+    );
+    if (stationPoints.length > 0) {
+      map.fitBounds(L.latLngBounds(stationPoints), {
+        padding: [40, 40],
+      });
+    }
   }, [lines, onLineSelect, selectedLineId]);
 
   useEffect(() => {
