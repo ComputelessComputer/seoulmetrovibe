@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { SEOUL_CENTER, SEOUL_ZOOM } from '../constants';
-import type { GeoPoint, Line, ThemeMode, TrainRenderState } from '../types';
+import type { Line, ThemeMode, TrainRenderState } from '../types';
 
 interface MapViewProps {
-  center?: GeoPoint | null;
   lines: Line[];
   onClearSelection: () => void;
   onLineSelect: (lineId: string) => void;
@@ -21,7 +20,6 @@ const TILE_URLS: Record<ThemeMode, string> = {
 const STATION_DOTS_MIN_ZOOM = 13; // only show station dots when zoomed in enough
 
 export function MapView({
-  center,
   lines,
   onClearSelection,
   onLineSelect,
@@ -113,15 +111,6 @@ export function MapView({
     }
     tileLayer.setUrl(TILE_URLS[theme]);
   }, [theme]);
-
-  useEffect(() => {
-    if (!center || !mapRef.current) {
-      return;
-    }
-    mapRef.current.setView([center.lat, center.lng], 13, {
-      animate: true,
-    });
-  }, [center]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -1,4 +1,3 @@
-export type ViewMode = 'map' | 'bars';
 export type DataMode = 'demo' | 'live';
 export type ThemeMode = 'dark' | 'light';
 

@@ -14,6 +14,67 @@ export const LIVE_API_BASE =
 
 export const TARGET_TRAIN_COUNT = 300;
 
+export const LINE_INFO: Record<string, { instrument: string; description: string }> = {
+  '1호선': {
+    instrument: 'Walking Bass',
+    description: 'The oldest line, running since 1974. Dark blue, the backbone of the city.',
+  },
+  '2호선': {
+    instrument: 'Piano',
+    description:
+      'The great circle line. 51 stations looping central Seoul — it never stops, always returning.',
+  },
+  '3호선': {
+    instrument: 'Saxophone',
+    description: 'Orange, diagonal from Goyang to Ogeum. Warm, urban, slightly sharp.',
+  },
+  '4호선': {
+    instrument: 'Vibraphone',
+    description: 'Sky blue, crossing the Han River from north to south. Metallic, crystalline.',
+  },
+  '5호선': {
+    instrument: 'String Pad',
+    description:
+      'Purple, the longest line. 56 stations east to west — it sustains, fills the background.',
+  },
+  '6호선': {
+    instrument: 'Brushed Snare',
+    description: 'Brown, curving through the northwest. Soft percussion, underheard but always there.',
+  },
+  '7호선': {
+    instrument: 'Fretless Bass',
+    description: 'Olive, long diagonal from Dobong to Incheon. Low and buzzy, finding the groove.',
+  },
+  '8호선': {
+    instrument: 'Bells',
+    description: 'Pink, the shortest line. High notes, brief, vanishing.',
+  },
+  '9호선': {
+    instrument: 'Flute',
+    description: 'Gold, the express line along the Han River. Fast, bright, skipping stations.',
+  },
+  분당선: {
+    instrument: 'Gentle Piano',
+    description: 'Yellow, the Bundang suburban line. Softer keys, steady rhythm.',
+  },
+  수인분당선: {
+    instrument: 'Gentle Piano',
+    description: 'Yellow, running from Suwon to Seoul. The same instrument, a longer journey.',
+  },
+  신분당선: {
+    instrument: 'Solo Saxophone',
+    description: 'Deep red, the Sinbundang express. Fast, deliberate, louder than the rest.',
+  },
+  경의중앙선: {
+    instrument: 'Sustained Chord',
+    description: 'Teal, running east to west through the city. Long tones, a slow exhale.',
+  },
+  공항철도: {
+    instrument: 'Clean Tone',
+    description: 'Blue, to Incheon Airport. Unhurried, clear, departure.',
+  },
+};
+
 export const LINE_COLOR_OVERRIDES: Record<string, string> = {
   '1호선': '#0d3692',
   '2호선': '#33a23d',

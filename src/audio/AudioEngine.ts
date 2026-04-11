@@ -221,7 +221,7 @@ export class AudioEngine {
     this.meter.dispose();
   }
 
-  play(lineName: string, progress: number, density: number, express: boolean): void {
+  play(lineName: string, progress: number, express: boolean): void {
     if (!this.started || this.muted) {
       return;
     }
@@ -230,7 +230,7 @@ export class AudioEngine {
     const synth = this.getInstrument(lineName, config);
     const note = this.getNote(config.notes, progress);
     const duration = express && config.duration === '16n' ? '32n' : config.duration;
-    const velocity = Math.min(1, 0.22 + density * 0.4 + (express ? 0.12 : 0) + (config.velocityBoost ?? 0));
+    const velocity = Math.min(1, 0.22 + (express ? 0.12 : 0) + (config.velocityBoost ?? 0));
 
     try {
       if (synth instanceof Tone.PolySynth && config.chord) {

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from './audio/AudioEngine';
-import { BarsView } from './components/BarsView';
 import { MapView } from './components/MapView';
+import { SidePanel } from './components/SidePanel';
 import { fetchMetroData } from './data/metroData';
 import { fetchLivePositions } from './data/liveApi';
 import { advanceTrains, createDemoTrains, hydrateLiveTrains, renderTrains } from './simulation/trainEngine';
-import type { DataMode, Line, ThemeMode, Train, TrainRenderState, ViewMode } from './types';
+import type { DataMode, Line, ThemeMode, Train, TrainRenderState } from './types';
 
 function getLineBadgeLabel(lineName: string): string {
   const numberMatch = lineName.match(/^(\d+)호선$/);
@@ -27,25 +27,15 @@ function getLineBadgeLabel(lineName: string): string {
   return badgeMap[lineName] ?? lineName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
 }
 
-function getSelectedLineLabel(lineName: string): string {
-  const numberMatch = lineName.match(/^(\d+)호선$/);
-  if (numberMatch) {
-    return `LINE ${numberMatch[1]}`;
-  }
-
-  return lineName.toUpperCase();
-}
-
 function App() {
   const [lines, setLines] = useState<Line[]>([]);
   const [trains, setTrains] = useState<Train[]>([]);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('map');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  );
   const [dataMode, setDataMode] = useState<DataMode>('demo');
   const [error, setError] = useState<string | null>(null);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationPending, setLocationPending] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const audioRef = useRef<AudioEngine | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -65,6 +55,23 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
   }, [themeMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyThemePreference = (event: MediaQueryList | MediaQueryListEvent) => {
+      setThemeMode(event.matches ? 'dark' : 'light');
+    };
+
+    applyThemePreference(mediaQuery);
+    mediaQuery.addEventListener('change', applyThemePreference);
+    return () => {
+      mediaQuery.removeEventListener('change', applyThemePreference);
+    };
+  }, []);
 
   useEffect(() => {
     const enableAudio = () => {
@@ -154,12 +161,6 @@ function App() {
 
   const renderStates = useMemo<TrainRenderState[]>(() => renderTrains(lines, trains), [lines, trains]);
   const linesById = useMemo(() => new Map(lines.map((line) => [line.id, line])), [lines]);
-  const selectedLine = selectedLineId ? linesById.get(selectedLineId) ?? null : null;
-  const selectedLineTrainCount = useMemo(
-    () => (selectedLineId ? renderStates.filter((train) => train.lineId === selectedLineId).length : 0),
-    [renderStates, selectedLineId],
-  );
-
   useEffect(() => {
     if (renderStates.length === 0) {
       return;
@@ -171,11 +172,6 @@ function App() {
     }
 
     const now = Date.now();
-    const lineCounts = new Map<string, number>();
-    renderStates.forEach((train) => {
-      lineCounts.set(train.lineId, (lineCounts.get(train.lineId) ?? 0) + 1);
-    });
-
     const pulsingTrains = renderStates.filter((train) => {
       const lastHandledPulse = handledPulseRef.current.get(train.id) ?? 0;
       return train.pulseUntil > now && train.pulseUntil !== lastHandledPulse;
@@ -192,9 +188,8 @@ function App() {
         return;
       }
 
-      const density = (lineCounts.get(train.lineId) ?? 1) / Math.max(1, lines.length * 3);
       try {
-        audio.play(line.name, train.progress, density, train.express);
+        audio.play(line.name, train.progress, train.express);
       } catch (error) {
         console.error(`Audio playback crashed for ${train.id}.`, error);
       }
@@ -202,27 +197,6 @@ function App() {
   }, [audioEnabled, lines.length, linesById, renderStates, selectedLineId]);
 
   const legendLines = useMemo(() => lines.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')), [lines]);
-
-  function handleLocate() {
-    if (!navigator.geolocation) {
-      return;
-    }
-    setLocationPending(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setMapCenter({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-        setLocationPending(false);
-      },
-      (geoError) => {
-        console.error('Failed to get current location.', geoError);
-        setLocationPending(false);
-      },
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
-  }
 
   function handleLineToggle(lineId: string) {
     setSelectedLineId((current) => (current === lineId ? null : lineId));
@@ -234,112 +208,22 @@ function App() {
 
   return (
     <div className="app-shell">
-      {viewMode === 'map' ? (
-        <MapView
-          center={mapCenter}
-          lines={lines}
-          onClearSelection={handleLineClear}
-          onLineSelect={handleLineToggle}
-          selectedLineId={selectedLineId}
-          theme={themeMode}
-          trains={renderStates}
-        />
-      ) : (
-        <BarsView
-          getBadgeLabel={getLineBadgeLabel}
-          lines={legendLines}
-          onLineSelect={handleLineToggle}
-          selectedLineLabel={selectedLine ? getSelectedLineLabel(selectedLine.name) : null}
-          selectedLineId={selectedLineId}
-          selectedLineTrainCount={selectedLineTrainCount}
-          totalTrainCount={renderStates.length}
-          trains={renderStates}
-        />
-      )}
+      <MapView
+        lines={lines}
+        onClearSelection={handleLineClear}
+        onLineSelect={handleLineToggle}
+        selectedLineId={selectedLineId}
+        theme={themeMode}
+        trains={renderStates}
+      />
 
-      {viewMode === 'map' ? (
-        <div className="side-panel" aria-label="Line legend and line filters">
-          <div className="side-panel-metric">{`${renderStates.length} TRAINS IN MOTION`}</div>
-          <div className="side-panel-grid">
-            {legendLines.map((line) => (
-              <button
-                key={line.id}
-                type="button"
-                className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
-                  selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
-                }`}
-                title={line.name}
-                aria-label={`Solo ${line.name}`}
-                aria-pressed={selectedLineId === line.id}
-                onClick={() => handleLineToggle(line.id)}
-              >
-                <span
-                  className="legend-badge"
-                  style={{ backgroundColor: line.color }}
-                  aria-hidden="true"
-                >
-                  {getLineBadgeLabel(line.name)}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="side-panel-separator" aria-hidden="true" />
-          {selectedLine ? (
-            <div className="side-panel-metric" aria-live="polite">
-              {`${getSelectedLineLabel(selectedLine.name)} · ${selectedLineTrainCount} TRAINS`}
-            </div>
-          ) : (
-            <div className="side-panel-metric side-panel-metric-empty" aria-hidden="true">
-              SELECT A LINE
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <div className="bottom-center-controls">
-        <div className="pill-toggle" role="tablist" aria-label="View selector">
-          <button
-            type="button"
-            className={viewMode === 'map' ? 'is-active' : ''}
-            onClick={() => setViewMode('map')}
-          >
-            MAP
-          </button>
-          <button
-            type="button"
-            className={viewMode === 'bars' ? 'is-active' : ''}
-            onClick={() => setViewMode('bars')}
-          >
-            BARS
-          </button>
-        </div>
-        <div className="pill-toggle" role="tablist" aria-label="Theme selector">
-          <button
-            type="button"
-            className={themeMode === 'dark' ? 'is-active' : ''}
-            onClick={() => setThemeMode('dark')}
-          >
-            DARK
-          </button>
-          <button
-            type="button"
-            className={themeMode === 'light' ? 'is-active' : ''}
-            onClick={() => setThemeMode('light')}
-          >
-            LIGHT
-          </button>
-        </div>
-        <button
-          type="button"
-          className={`location-button ${locationPending ? 'is-pending' : ''}`}
-          onClick={handleLocate}
-          aria-label="Use current location"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 2.5a1 1 0 0 1 1 1V5.1a6.9 6.9 0 0 1 5.9 5.9H20.5a1 1 0 1 1 0 2h-1.6a6.9 6.9 0 0 1-5.9 5.9v1.6a1 1 0 1 1-2 0v-1.6a6.9 6.9 0 0 1-5.9-5.9H3.5a1 1 0 1 1 0-2h1.6A6.9 6.9 0 0 1 11 5.1V3.5a1 1 0 0 1 1-1Zm0 4.6A4.9 4.9 0 1 0 12 17a4.9 4.9 0 0 0 0-9.8Zm0 2.4a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z" />
-          </svg>
-        </button>
-      </div>
+      <SidePanel
+        getBadgeLabel={getLineBadgeLabel}
+        lines={legendLines}
+        onLineSelect={handleLineToggle}
+        selectedLineId={selectedLineId}
+        totalTrainCount={renderStates.length}
+      />
 
       {error ? <div className="sr-only">{error}</div> : null}
       {dataMode === 'live' ? <div className="sr-only">Live mode</div> : null}
