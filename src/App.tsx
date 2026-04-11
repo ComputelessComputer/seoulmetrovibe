@@ -7,6 +7,26 @@ import { fetchLivePositions } from './data/liveApi';
 import { advanceTrains, createDemoTrains, hydrateLiveTrains, renderTrains } from './simulation/trainEngine';
 import type { DataMode, Line, ThemeMode, Train, TrainRenderState, ViewMode } from './types';
 
+function getLineBadgeLabel(lineName: string): string {
+  const numberMatch = lineName.match(/^(\d+)호선$/);
+  if (numberMatch) {
+    return numberMatch[1];
+  }
+
+  const badgeMap: Record<string, string> = {
+    분당선: 'BD',
+    수인분당선: 'BD',
+    신분당선: 'SBD',
+    공항철도: 'AE',
+    경의중앙선: 'GJ',
+    경춘선: 'GC',
+    경강선: 'GK',
+    우이신설선: 'UI',
+  };
+
+  return badgeMap[lineName] ?? lineName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+}
+
 function App() {
   const [lines, setLines] = useState<Line[]>([]);
   const [trains, setTrains] = useState<Train[]>([]);
@@ -199,12 +219,15 @@ function App() {
 
       <div className="top-left-legend">
         {legendLines.map((line) => (
-          <span
-            key={line.id}
-            className="legend-dot"
-            style={{ backgroundColor: line.color }}
-            title={line.name}
-          />
+          <span key={line.id} className="legend-item" title={line.name}>
+            <span
+              className="legend-badge"
+              style={{ backgroundColor: line.color }}
+              aria-hidden="true"
+            >
+              {getLineBadgeLabel(line.name)}
+            </span>
+          </span>
         ))}
       </div>
 

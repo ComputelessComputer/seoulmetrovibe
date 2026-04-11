@@ -81,8 +81,8 @@ export function MapView({ center, lines, theme, trains }: MapViewProps) {
           branch.map((point) => [point.lat, point.lng] as [number, number]),
           {
             color: line.color,
-            weight: 1.5,
-            opacity: 0.5,
+            weight: 2.5,
+            opacity: 0.85,
             interactive: false,
           },
         ).addTo(lineLayer);
