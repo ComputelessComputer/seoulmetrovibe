@@ -2,6 +2,8 @@ import { TARGET_TRAIN_COUNT } from '../constants';
 import { clamp, getPointAtProgress } from '../lib/geo';
 import type { DataMode, Line, LivePosition, Train, TrainRenderState } from '../types';
 
+const PULSE_DURATION_MS = 240;
+
 function currentKoreanHour(): number {
   return Number(
     new Intl.DateTimeFormat('en-US', {
@@ -78,6 +80,7 @@ export function advanceTrains(
   trains: Train[],
   deltaMs: number,
   mode: DataMode,
+  now = Date.now(),
 ): Train[] {
   return trains.map((train) => {
     const distance = (deltaMs / 16.67) * train.speed * (mode === 'demo' ? 1 : 0.75);
@@ -92,10 +95,17 @@ export function advanceTrains(
       direction = 1;
     }
 
+    const interval = train.express ? 1200 : 1800;
+    const pulsePhaseOffset = hash(`${train.id}:pulse`) * interval;
+    const previousBucket = Math.floor((now - deltaMs + pulsePhaseOffset) / interval);
+    const currentBucket = Math.floor((now + pulsePhaseOffset) / interval);
+    const pulseUntil = currentBucket > previousBucket ? now + PULSE_DURATION_MS : train.pulseUntil;
+
     return {
       ...train,
       progress: clamp(progress),
       direction,
+      pulseUntil,
     };
   });
 }

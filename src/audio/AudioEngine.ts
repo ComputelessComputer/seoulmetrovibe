@@ -40,12 +40,18 @@ export class AudioEngine {
   private meter = new Tone.Gain(0.7).toDestination();
   private fallbackIndex = 0;
 
-  async start(): Promise<void> {
+  async start(): Promise<boolean> {
     if (this.started) {
-      return;
+      return true;
     }
-    await Tone.start();
-    this.started = true;
+    try {
+      await Tone.start();
+      this.started = true;
+      return true;
+    } catch (error) {
+      console.error('Failed to start Tone.js audio context.', error);
+      return false;
+    }
   }
 
   setMuted(muted: boolean): void {
@@ -77,7 +83,12 @@ export class AudioEngine {
       }
       return;
     }
-    synth.triggerAttackRelease(note, duration, undefined, velocity);
+
+    try {
+      synth.triggerAttackRelease(note, duration, undefined, velocity);
+    } catch (error) {
+      console.error(`Failed to play note for ${lineName}.`, error);
+    }
   }
 
   private getInstrument(lineName: string): Instrument {

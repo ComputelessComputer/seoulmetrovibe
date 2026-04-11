@@ -30,10 +30,21 @@ interface RawLineSegment {
   line_num?: string;
   name?: string;
   lineName?: string;
-  station?: Array<{ lat?: number | string; lng?: number | string; lon?: number | string; name?: string }>;
-  via?: Array<{ lat?: number | string; lng?: number | string; lon?: number | string }>;
-  points?: Array<{ lat?: number | string; lng?: number | string; lon?: number | string }>;
+  station?: RawSegmentPoint[];
+  via?: RawSegmentPoint[];
+  points?: RawSegmentPoint[];
 }
+
+type RawSegmentPoint =
+  | {
+      lat?: number | string;
+      lng?: number | string;
+      lon?: number | string;
+      xpoint_wgs?: number | string;
+      ypoint_wgs?: number | string;
+      name?: string;
+    }
+  | [number | string, number | string];
 
 const lineColorCache = new Map<string, string>();
 const stationCoordMap = new Map<string, GeoPoint>();
@@ -55,7 +66,26 @@ function parseNumber(value: unknown): number | null {
   return null;
 }
 
-function parsePoint(raw: { lat?: unknown; lng?: unknown; lon?: unknown; xpoint_wgs?: unknown; ypoint_wgs?: unknown }): GeoPoint | null {
+function parsePoint(
+  raw:
+    | {
+        lat?: unknown;
+        lng?: unknown;
+        lon?: unknown;
+        xpoint_wgs?: unknown;
+        ypoint_wgs?: unknown;
+      }
+    | [unknown, unknown],
+): GeoPoint | null {
+  if (Array.isArray(raw)) {
+    const lat = parseNumber(raw[0]);
+    const lng = parseNumber(raw[1]);
+    if (lat === null || lng === null) {
+      return null;
+    }
+    return { lat, lng };
+  }
+
   const lat = parseNumber(raw.lat ?? raw.ypoint_wgs);
   const lng = parseNumber(raw.lng ?? raw.lon ?? raw.xpoint_wgs);
   if (lat === null || lng === null) {
@@ -121,6 +151,85 @@ function buildFallbackPolyline(stations: Station[]): GeoPoint[] {
   );
 }
 
+function getPolylineVertexProgress(points: GeoPoint[]): number[] {
+  if (points.length === 0) {
+    return [];
+  }
+
+  const totalLength = getPolylineLength(points);
+  const progress = [0];
+  let elapsed = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    elapsed += Math.hypot(current.lat - previous.lat, current.lng - previous.lng);
+    progress.push(totalLength === 0 ? 0 : elapsed / totalLength);
+  }
+
+  return progress;
+}
+
+function getOrderedStations(lineStations: Station[]): Station[] {
+  return lineStations.slice().sort((a, b) => a.sequence - b.sequence);
+}
+
+function getSegmentSortKey(segment: RawLineSegment, sequenceByStationName: Map<string, number>): number {
+  const stationSequences = (segment.station ?? [])
+    .map((station) =>
+      !Array.isArray(station) && station.name
+        ? sequenceByStationName.get(normalizeStationName(station.name))
+        : undefined,
+    )
+    .filter((sequence): sequence is number => typeof sequence === 'number');
+
+  return stationSequences.length > 0 ? Math.min(...stationSequences) : Number.POSITIVE_INFINITY;
+}
+
+function buildSegmentPath(segment: RawLineSegment): GeoPoint[] {
+  const stationPoints = (segment.station ?? [])
+    .map((item) =>
+      Array.isArray(item)
+        ? parsePoint(item)
+        : resolveStationPoint(item, item.name),
+    )
+    .filter((point): point is GeoPoint => point !== null);
+  const viaPoints = (segment.via ?? segment.points ?? [])
+    .map((item) => parsePoint(item))
+    .filter((point): point is GeoPoint => point !== null);
+
+  if (stationPoints.length === 0) {
+    return dedupePoints(viaPoints);
+  }
+  if (viaPoints.length < 2) {
+    return dedupePoints([...stationPoints, ...viaPoints]);
+  }
+
+  const basePath = dedupePoints(viaPoints);
+  const baseProgress = getPolylineVertexProgress(basePath);
+  const mergedPath = [
+    ...basePath.map((point, index) => ({
+      point,
+      progress: baseProgress[index] ?? 0,
+      priority: 0,
+    })),
+    ...stationPoints.map((point, index) => ({
+      point,
+      progress: getClosestProgress(basePath, point),
+      priority: index + 1,
+    })),
+  ]
+    .sort((a, b) => {
+      if (a.progress === b.progress) {
+        return a.priority - b.priority;
+      }
+      return a.progress - b.progress;
+    })
+    .map((entry) => entry.point);
+
+  return dedupePoints(mergedPath);
+}
+
 export async function fetchMetroData(): Promise<MetroData> {
   const [stationResponse, lineResponse] = await Promise.all([
     fetch(STATIONS_URL),
@@ -175,18 +284,28 @@ export async function fetchMetroData(): Promise<MetroData> {
   const lines: Line[] = Array.from(stationsByLine.entries())
     .map(([lineId, lineStations]) => {
       const segments = rawSegmentsByLine.get(lineId) ?? [];
+      const orderedStations = getOrderedStations(lineStations);
+      const stationSequenceByName = new Map(
+        orderedStations.map((station) => [normalizeStationName(station.name), station.sequence]),
+      );
       const pathPoints = dedupePoints(
-        segments.flatMap((segment) => {
-          const stationPoints = (segment.station ?? [])
-            .map((item) => resolveStationPoint(item, item.name))
-            .filter((point): point is GeoPoint => point !== null);
-          const viaPoints = (segment.via ?? segment.points ?? []).map((item) => parsePoint(item)).filter((point): point is GeoPoint => point !== null);
-          return [...stationPoints, ...viaPoints];
-        }),
+        segments
+          .map((segment, index) => ({
+            index,
+            sortKey: getSegmentSortKey(segment, stationSequenceByName),
+            points: buildSegmentPath(segment),
+          }))
+          .sort((a, b) => {
+            if (a.sortKey === b.sortKey) {
+              return a.index - b.index;
+            }
+            return a.sortKey - b.sortKey;
+          })
+          .flatMap((segment) => segment.points),
       );
 
-      const polyline = pathPoints.length >= 2 ? pathPoints : buildFallbackPolyline(lineStations);
-      const normalizedStations = lineStations
+      const polyline = pathPoints.length >= 2 ? pathPoints : buildFallbackPolyline(orderedStations);
+      const normalizedStations = orderedStations
         .slice()
         .sort((a, b) => getClosestProgress(polyline, a) - getClosestProgress(polyline, b));
 

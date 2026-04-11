@@ -20,7 +20,7 @@ function App() {
   const audioRef = useRef<AudioEngine | null>(null);
   const frameRef = useRef<number | null>(null);
   const previousTimeRef = useRef<number>(0);
-  const lastNoteRef = useRef<Map<string, number>>(new Map());
+  const handledPulseRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     audioRef.current = new AudioEngine();
@@ -38,13 +38,20 @@ function App() {
 
   useEffect(() => {
     const enableAudio = () => {
-      void audioRef.current?.start().then(() => {
-        setAudioEnabled(true);
-      });
-      window.removeEventListener('pointerdown', enableAudio);
+      void (async () => {
+        try {
+          const started = await audioRef.current?.start();
+          if (started) {
+            setAudioEnabled(true);
+            window.removeEventListener('pointerdown', enableAudio);
+          }
+        } catch (error) {
+          console.error('Audio startup crashed during pointer interaction.', error);
+        }
+      })();
     };
 
-    window.addEventListener('pointerdown', enableAudio, { once: true });
+    window.addEventListener('pointerdown', enableAudio);
     return () => {
       window.removeEventListener('pointerdown', enableAudio);
     };
@@ -79,6 +86,7 @@ function App() {
 
         setTrains(createDemoTrains(metro.lines));
       } catch (loadError) {
+        console.error('Failed to load metro data.', loadError);
         setError(loadError instanceof Error ? loadError.message : 'Failed to load metro data');
       }
     }
@@ -100,7 +108,7 @@ function App() {
       }
       const deltaMs = timestamp - previousTimeRef.current;
       previousTimeRef.current = timestamp;
-      setTrains((current) => advanceTrains(current, deltaMs, dataMode));
+      setTrains((current) => advanceTrains(current, deltaMs, dataMode, Date.now()));
       frameRef.current = requestAnimationFrame(tick);
     };
 
@@ -133,40 +141,29 @@ function App() {
       lineCounts.set(train.lineId, (lineCounts.get(train.lineId) ?? 0) + 1);
     });
 
-    const triggeredTrainIds = new Set(
-      renderStates
-        .filter((train) => {
-          const lastTrigger = lastNoteRef.current.get(train.id) ?? 0;
-          const interval = train.express ? 1200 : 1800;
-          return now - lastTrigger >= interval;
-        })
-        .map((train) => train.id),
-    );
+    const pulsingTrains = renderStates.filter((train) => {
+      const lastHandledPulse = handledPulseRef.current.get(train.id) ?? 0;
+      return train.pulseUntil > now && train.pulseUntil !== lastHandledPulse;
+    });
 
-    if (triggeredTrainIds.size === 0) {
+    if (pulsingTrains.length === 0) {
       return;
     }
 
-    setTrains((current) =>
-      current.map((train) => {
-        if (!triggeredTrainIds.has(train.id)) {
-          return train;
-        }
+    pulsingTrains.forEach((train) => {
+      handledPulseRef.current.set(train.id, train.pulseUntil);
+      const line = linesById.get(train.lineId);
+      if (!line || !audioEnabled) {
+        return;
+      }
 
-        lastNoteRef.current.set(train.id, now);
-        const line = linesById.get(train.lineId);
-        if (line) {
-          const density = (lineCounts.get(train.lineId) ?? 1) / Math.max(1, lines.length * 3);
-          if (audioEnabled) {
-            audio.play(line.name, train.progress, density, train.express);
-          }
-        }
-        return {
-          ...train,
-          pulseUntil: now + 240,
-        };
-      }),
-    );
+      const density = (lineCounts.get(train.lineId) ?? 1) / Math.max(1, lines.length * 3);
+      try {
+        audio.play(line.name, train.progress, density, train.express);
+      } catch (error) {
+        console.error(`Audio playback crashed for ${train.id}.`, error);
+      }
+    });
   }, [audioEnabled, lines.length, linesById, renderStates]);
 
   const legendLines = useMemo(() => lines.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')), [lines]);
@@ -184,7 +181,10 @@ function App() {
         });
         setLocationPending(false);
       },
-      () => setLocationPending(false),
+      (geoError) => {
+        console.error('Failed to get current location.', geoError);
+        setLocationPending(false);
+      },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
