@@ -179,6 +179,10 @@ function appendSequentialPoints(target: GeoPoint[], source: GeoPoint[]) {
   }
 }
 
+function pointsMatch(a: GeoPoint | undefined, b: GeoPoint | undefined): boolean {
+  return !!a && !!b && a.lat === b.lat && a.lng === b.lng;
+}
+
 function buildNodeViaPath(node: RawLineNode): GeoPoint[] {
   const viaPoints = (node.via ?? node.points ?? [])
     .map((item) => parsePoint(item))
@@ -198,12 +202,38 @@ function buildNodeViaPath(node: RawLineNode): GeoPoint[] {
   );
 }
 
-function buildLineEntryPath(entry: RawLineEntry): GeoPoint[] {
-  const points: GeoPoint[] = [];
+function buildLineEntryBranches(entry: RawLineEntry): GeoPoint[][] {
+  const branches: GeoPoint[][] = [];
   for (const node of getEntryNodes(entry)) {
-    appendSequentialPoints(points, buildNodeViaPath(node));
+    const segment = buildNodeViaPath(node);
+    if (segment.length < 2) {
+      continue;
+    }
+
+    const branch = branches[branches.length - 1];
+    if (!branch) {
+      branches.push([...segment]);
+      continue;
+    }
+
+    const branchLast = branch[branch.length - 1];
+    const segmentFirst = segment[0];
+    const segmentLast = segment[segment.length - 1];
+
+    if (pointsMatch(branchLast, segmentFirst)) {
+      appendSequentialPoints(branch, segment);
+      continue;
+    }
+
+    if (pointsMatch(branchLast, segmentLast)) {
+      appendSequentialPoints(branch, [...segment].reverse());
+      continue;
+    }
+
+    branches.push([...segment]);
   }
-  return points;
+
+  return branches.map((branch) => dedupePoints(branch)).filter((branch) => branch.length >= 2);
 }
 
 export async function fetchMetroData(): Promise<MetroData> {
@@ -261,11 +291,10 @@ export async function fetchMetroData(): Promise<MetroData> {
     .map(([lineId, lineStations]) => {
       const orderedStations = getOrderedStations(lineStations);
       const fallbackPolyline = buildFallbackPolyline(orderedStations);
-      const orderedEntryPaths = (rawEntriesByLine.get(lineId) ?? [])
-        .map((entry) => buildLineEntryPath(entry))
-        .map((points) => (points.length >= 2 ? points : fallbackPolyline))
+      const lineBranches = (rawEntriesByLine.get(lineId) ?? [])
+        .flatMap((entry) => buildLineEntryBranches(entry))
         .filter((points) => points.length >= 2);
-      const primaryPolyline = orderedEntryPaths.reduce<GeoPoint[] | null>((best, points) => {
+      const primaryPolyline = lineBranches.reduce<GeoPoint[] | null>((best, points) => {
         if (!best) {
           return points;
         }
@@ -277,7 +306,7 @@ export async function fetchMetroData(): Promise<MetroData> {
         name: lineId,
         color: getLineColor(lineId),
         points: primaryPolyline,
-        branches: [primaryPolyline],
+        branches: lineBranches.length > 0 ? lineBranches : [primaryPolyline],
         stations: orderedStations,
         length: getPolylineLength(primaryPolyline),
       } satisfies Line;
