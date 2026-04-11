@@ -18,6 +18,27 @@ const TILE_URLS: Record<ThemeMode, string> = {
   light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
 };
 const STATION_DOTS_MIN_ZOOM = 13; // only show station dots when zoomed in enough
+const LINE_CLICK_THRESHOLD_PX = 10;
+
+function getPointToSegmentDistanceSquared(point: L.Point, start: L.Point, end: L.Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  if (dx === 0 && dy === 0) {
+    const pointDx = point.x - start.x;
+    const pointDy = point.y - start.y;
+    return pointDx * pointDx + pointDy * pointDy;
+  }
+
+  const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+  const t = Math.max(0, Math.min(1, projection));
+  const closestX = start.x + t * dx;
+  const closestY = start.y + t * dy;
+  const distanceX = point.x - closestX;
+  const distanceY = point.y - closestY;
+
+  return distanceX * distanceX + distanceY * distanceY;
+}
 
 export function MapView({
   lines,
@@ -34,18 +55,39 @@ export function MapView({
   const trainLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const hasFitRef = useRef(false);
-  const ignoreNextMapClickRef = useRef(false);
-  const selectedLineIdSetRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    selectedLineIdSetRef.current = new Set(selectedLineIds);
-  }, [selectedLineIds]);
-
-  function handleMapBackgroundClick() {
-    if (ignoreNextMapClickRef.current) {
-      ignoreNextMapClickRef.current = false;
+  function handleMapClick(event: L.LeafletMouseEvent) {
+    const map = mapRef.current;
+    if (!map) {
       return;
     }
+
+    const thresholdSq = LINE_CLICK_THRESHOLD_PX * LINE_CLICK_THRESHOLD_PX;
+    let closestLineId: string | null = null;
+    let closestDistanceSq = Number.POSITIVE_INFINITY;
+
+    lines.forEach((line) => {
+      const branches = line.branches.length > 0 ? line.branches : [line.points];
+      branches.forEach((branch) => {
+        for (let index = 1; index < branch.length; index += 1) {
+          const start = map.latLngToContainerPoint([branch[index - 1].lat, branch[index - 1].lng]);
+          const end = map.latLngToContainerPoint([branch[index].lat, branch[index].lng]);
+          const distanceSq = getPointToSegmentDistanceSquared(event.containerPoint, start, end);
+
+          if (distanceSq < closestDistanceSq) {
+            closestDistanceSq = distanceSq;
+            closestLineId = line.id;
+          }
+        }
+      });
+    });
+
+    if (closestLineId && closestDistanceSq <= thresholdSq) {
+      const originalEvent = event.originalEvent as MouseEvent | undefined;
+      onLineSelect(closestLineId, !!originalEvent && (originalEvent.metaKey || originalEvent.ctrlKey));
+      return;
+    }
+
     onClearSelection();
   }
 
@@ -108,13 +150,13 @@ export function MapView({
       return;
     }
 
-    map.off('click', handleMapBackgroundClick);
-    map.on('click', handleMapBackgroundClick);
+    map.off('click');
+    map.on('click', handleMapClick);
 
     return () => {
-      map.off('click', handleMapBackgroundClick);
+      map.off('click');
     };
-  }, [onClearSelection]);
+  }, [lines, onClearSelection, onLineSelect]);
 
   useEffect(() => {
     const tileLayer = tileLayerRef.current;
@@ -152,33 +194,10 @@ export function MapView({
           },
         );
 
-        const hitArea = L.polyline(
-          latLngs,
-          {
-            color: line.color,
-            weight: Math.max(isSelected ? 16 : 14, (isSelected ? 4 : 2.5) + 10),
-            opacity: 0,
-            interactive: true,
-            bubblingMouseEvents: false,
-            className: 'metro-line-hit',
-          },
-        );
-
-        hitArea.on('click', (event) => {
-          ignoreNextMapClickRef.current = true;
-          if (event.originalEvent) {
-            L.DomEvent.stop(event.originalEvent);
-          }
-          const originalEvent = event.originalEvent as MouseEvent | undefined;
-          onLineSelect(line.id, !!originalEvent && (originalEvent.metaKey || originalEvent.ctrlKey));
-        });
-
         visibleLine.addTo(lineLayer);
-        hitArea.addTo(lineLayer);
 
         if (isSelected) {
           visibleLine.bringToFront();
-          hitArea.bringToFront();
         }
       });
 
@@ -204,7 +223,7 @@ export function MapView({
         padding: [40, 40],
       });
     }
-  }, [lines, onLineSelect, selectedLineIds]);
+  }, [lines, selectedLineIds]);
 
   useEffect(() => {
     const trainLayer = trainLayerRef.current;
@@ -216,7 +235,7 @@ export function MapView({
     const now = Date.now();
     trains.forEach((train) => {
       const pulsing = train.pulseUntil > now;
-      const isDimmed = selectedLineIds.length > 0 && !selectedLineIdSetRef.current.has(train.lineId);
+      const isDimmed = selectedLineIds.length > 0 && !selectedLineIds.includes(train.lineId);
       L.circleMarker([train.point.lat, train.point.lng], {
         radius: pulsing ? 4 : 3,
         color: lines.find((line) => line.id === train.lineId)?.color ?? '#333333',
