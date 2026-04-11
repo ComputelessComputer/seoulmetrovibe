@@ -170,6 +170,15 @@ function getEntryNodes(entry: RawLineEntry): RawLineNode[] {
   return [{ station: entry.station, via: entry.via, points: entry.points }];
 }
 
+function appendSequentialPoints(target: GeoPoint[], source: GeoPoint[]) {
+  for (const point of source) {
+    const last = target[target.length - 1];
+    if (!last || last.lat !== point.lat || last.lng !== point.lng) {
+      target.push(point);
+    }
+  }
+}
+
 function buildNodeViaPath(node: RawLineNode): GeoPoint[] {
   const viaPoints = (node.via ?? node.points ?? [])
     .map((item) => parsePoint(item))
@@ -189,98 +198,12 @@ function buildNodeViaPath(node: RawLineNode): GeoPoint[] {
   );
 }
 
-function dedupeStations(stations: Station[]): Station[] {
-  const unique: Station[] = [];
-  for (const station of stations) {
-    const last = unique[unique.length - 1];
-    if (!last) {
-      unique.push(station);
-      continue;
-    }
-
-    const sameName = normalizeStationName(last.name) === normalizeStationName(station.name);
-    const samePoint = last.lat === station.lat && last.lng === station.lng;
-    if (!sameName || !samePoint) {
-      unique.push(station);
-    }
+function buildLineEntryPath(entry: RawLineEntry): GeoPoint[] {
+  const points: GeoPoint[] = [];
+  for (const node of getEntryNodes(entry)) {
+    appendSequentialPoints(points, buildNodeViaPath(node));
   }
-  return unique;
-}
-
-function buildBranchStations(
-  lineId: string,
-  nodes: RawLineNode[],
-  fallbackStationsByName: Map<string, Station>,
-): Station[] {
-  const stations = dedupeStations(
-    nodes.flatMap((node) =>
-      (node.station ?? [])
-        .map((item, index) => {
-          const stationName = !Array.isArray(item) ? item.name : undefined;
-          const point = Array.isArray(item)
-            ? parsePoint(item)
-            : resolveStationPoint(item, stationName);
-          const fallback = stationName
-            ? fallbackStationsByName.get(normalizeStationName(stationName))
-            : undefined;
-
-          if (!point && !fallback) {
-            return null;
-          }
-
-          return {
-            id: fallback?.id ?? `${lineId}-branch-station-${uniqueStationIdSeed(stationName, point, index)}`,
-            name: stationName ?? fallback?.name ?? `Station ${index + 1}`,
-            lineId,
-            lineName: lineId,
-            lat: point?.lat ?? fallback!.lat,
-            lng: point?.lng ?? fallback!.lng,
-            sequence: 0,
-          } satisfies Station;
-        })
-        .filter((station): station is Station => station !== null),
-    ),
-  );
-
-  return stations.map((station, index) => ({
-    ...station,
-    sequence: index,
-  }));
-}
-
-function uniqueStationIdSeed(
-  stationName: string | undefined,
-  point: GeoPoint | null,
-  index: number,
-): string {
-  if (stationName) {
-    return normalizeStationName(stationName);
-  }
-  if (point) {
-    return `${point.lat}-${point.lng}`;
-  }
-  return String(index);
-}
-
-function selectPrimaryBranch(
-  branches: { points: GeoPoint[]; stations: Station[] }[],
-  fallbackPoints: GeoPoint[],
-  fallbackStations: Station[],
-): { points: GeoPoint[]; stations: Station[] } {
-  const bestBranch = branches.reduce<{ points: GeoPoint[]; stations: Station[] } | null>((best, branch) => {
-    if (branch.points.length < 2) {
-      return best;
-    }
-    if (!best) {
-      return branch;
-    }
-    if (branch.stations.length !== best.stations.length) {
-      return branch.stations.length > best.stations.length ? branch : best;
-    }
-    return getPolylineLength(branch.points) > getPolylineLength(best.points) ? branch : best;
-  }, null);
-
-  return bestBranch ?? { points: fallbackPoints, stations: fallbackStations };
+  return points;
 }
 
 export async function fetchMetroData(): Promise<MetroData> {
@@ -338,32 +261,25 @@ export async function fetchMetroData(): Promise<MetroData> {
     .map(([lineId, lineStations]) => {
       const orderedStations = getOrderedStations(lineStations);
       const fallbackPolyline = buildFallbackPolyline(orderedStations);
-      const stationsByName = new Map(
-        orderedStations.map((station) => [normalizeStationName(station.name), station]),
-      );
-      const branches = (rawEntriesByLine.get(lineId) ?? [])
-        .map((entry) => {
-          const nodes = getEntryNodes(entry);
-          const points = dedupePoints(nodes.flatMap((node) => buildNodeViaPath(node)));
-          const stationsFromNodes = buildBranchStations(lineId, nodes, stationsByName);
-          const stationsForBranch = stationsFromNodes.length > 0 ? stationsFromNodes : orderedStations;
-          return {
-            points: points.length >= 2 ? points : buildFallbackPolyline(stationsForBranch),
-            stations: stationsForBranch,
-          };
-        })
-        .filter((branch) => branch.points.length >= 2);
-
-      const primaryBranch = selectPrimaryBranch(branches, fallbackPolyline, orderedStations);
+      const orderedEntryPaths = (rawEntriesByLine.get(lineId) ?? [])
+        .map((entry) => buildLineEntryPath(entry))
+        .map((points) => (points.length >= 2 ? points : fallbackPolyline))
+        .filter((points) => points.length >= 2);
+      const primaryPolyline = orderedEntryPaths.reduce<GeoPoint[] | null>((best, points) => {
+        if (!best) {
+          return points;
+        }
+        return getPolylineLength(points) > getPolylineLength(best) ? points : best;
+      }, null) ?? fallbackPolyline;
 
       return {
         id: lineId,
         name: lineId,
         color: getLineColor(lineId),
-        points: primaryBranch.points,
-        branches: branches.length > 0 ? branches.map((branch) => branch.points) : [primaryBranch.points],
-        stations: primaryBranch.stations,
-        length: getPolylineLength(primaryBranch.points),
+        points: primaryPolyline,
+        branches: [primaryPolyline],
+        stations: orderedStations,
+        length: getPolylineLength(primaryPolyline),
       } satisfies Line;
     })
     .filter((line) => line.points.length >= 2);
