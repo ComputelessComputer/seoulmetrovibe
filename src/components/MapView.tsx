@@ -18,7 +18,7 @@ const TILE_URLS: Record<ThemeMode, string> = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
   light: 'https://{s}.basemaps.cartocdn.com/positron/{z}/{x}/{y}{r}.png',
 };
-const STATION_DOTS_MIN_ZOOM = 11;
+const STATION_DOTS_MIN_ZOOM = 13; // only show station dots when zoomed in enough
 
 export function MapView({
   center,
@@ -35,6 +35,7 @@ export function MapView({
   const stationLayerRef = useRef<L.LayerGroup | null>(null);
   const trainLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const hasFitRef = useRef(false);
 
   function syncStationLayerVisibility() {
     const map = mapRef.current;
@@ -173,7 +174,8 @@ export function MapView({
     const stationPoints = lines.flatMap((line) =>
       line.stations.map((station) => [station.lat, station.lng] as [number, number]),
     );
-    if (stationPoints.length > 0) {
+    if (stationPoints.length > 0 && !hasFitRef.current) {
+      hasFitRef.current = true;
       map.fitBounds(L.latLngBounds(stationPoints), {
         padding: [40, 40],
       });
@@ -192,7 +194,7 @@ export function MapView({
       const pulsing = train.pulseUntil > now;
       const isDimmed = selectedLineId !== null && train.lineId !== selectedLineId;
       L.circleMarker([train.point.lat, train.point.lng], {
-        radius: pulsing ? 6.5 : 5,
+        radius: pulsing ? 4 : 3,
         color: lines.find((line) => line.id === train.lineId)?.color ?? '#333333',
         fillColor: lines.find((line) => line.id === train.lineId)?.color ?? '#333333',
         fillOpacity: isDimmed ? 0.35 : 1,
