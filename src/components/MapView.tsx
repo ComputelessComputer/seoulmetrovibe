@@ -6,8 +6,8 @@ import type { Line, ThemeMode, TrainRenderState } from '../types';
 interface MapViewProps {
   lines: Line[];
   onClearSelection: () => void;
-  onLineSelect: (lineId: string) => void;
-  selectedLineId: string | null;
+  onLineSelect: (lineId: string, append?: boolean) => void;
+  selectedLineIds: string[];
   theme: ThemeMode;
   trains: TrainRenderState[];
 }
@@ -23,7 +23,7 @@ export function MapView({
   lines,
   onClearSelection,
   onLineSelect,
-  selectedLineId,
+  selectedLineIds,
   theme,
   trains,
 }: MapViewProps) {
@@ -35,6 +35,11 @@ export function MapView({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const hasFitRef = useRef(false);
   const ignoreNextMapClickRef = useRef(false);
+  const selectedLineIdSetRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    selectedLineIdSetRef.current = new Set(selectedLineIds);
+  }, [selectedLineIds]);
 
   function handleMapBackgroundClick() {
     if (ignoreNextMapClickRef.current) {
@@ -131,8 +136,8 @@ export function MapView({
     stationLayer.clearLayers();
 
     lines.forEach((line) => {
-      const isSelected = selectedLineId === line.id;
-      const isDimmed = selectedLineId !== null && !isSelected;
+      const isSelected = selectedLineIds.includes(line.id);
+      const isDimmed = selectedLineIds.length > 0 && !isSelected;
       const branches = line.branches.length > 0 ? line.branches : [line.points];
       branches.forEach((branch) => {
         const latLngs = branch.map((point) => [point.lat, point.lng] as [number, number]);
@@ -164,7 +169,8 @@ export function MapView({
           if (event.originalEvent) {
             L.DomEvent.stop(event.originalEvent);
           }
-          onLineSelect(line.id);
+          const originalEvent = event.originalEvent as MouseEvent | undefined;
+          onLineSelect(line.id, !!originalEvent && (originalEvent.metaKey || originalEvent.ctrlKey));
         });
 
         visibleLine.addTo(lineLayer);
@@ -198,7 +204,7 @@ export function MapView({
         padding: [40, 40],
       });
     }
-  }, [lines, onLineSelect, selectedLineId]);
+  }, [lines, onLineSelect, selectedLineIds]);
 
   useEffect(() => {
     const trainLayer = trainLayerRef.current;
@@ -210,7 +216,7 @@ export function MapView({
     const now = Date.now();
     trains.forEach((train) => {
       const pulsing = train.pulseUntil > now;
-      const isDimmed = selectedLineId !== null && train.lineId !== selectedLineId;
+      const isDimmed = selectedLineIds.length > 0 && !selectedLineIdSetRef.current.has(train.lineId);
       L.circleMarker([train.point.lat, train.point.lng], {
         radius: pulsing ? 4 : 3,
         color: lines.find((line) => line.id === train.lineId)?.color ?? '#333333',
@@ -222,7 +228,7 @@ export function MapView({
         interactive: false,
       }).addTo(trainLayer);
     });
-  }, [lines, selectedLineId, trains]);
+  }, [lines, selectedLineIds, trains]);
 
   return <div ref={containerRef} className="map-root" />;
 }

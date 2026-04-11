@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { GITHUB_REPO_URL, LINE_INFO } from '../constants';
 import type { Line } from '../types';
 
@@ -51,10 +52,10 @@ function GitHubIcon() {
 interface SidePanelProps {
   getBadgeLabel: (lineName: string) => string;
   lines: Line[];
-  onLineSelect: (lineId: string) => void;
+  onLineSelect: (lineId: string, append?: boolean) => void;
   onToggleMute: () => void;
   muted: boolean;
-  selectedLineId: string | null;
+  selectedLineIds: string[];
   totalTrainCount: number;
 }
 
@@ -64,12 +65,21 @@ export function SidePanel({
   onLineSelect,
   onToggleMute,
   muted,
-  selectedLineId,
+  selectedLineIds,
   totalTrainCount,
 }: SidePanelProps) {
-  const selectedLine = selectedLineId ? lines.find((line) => line.id === selectedLineId) ?? null : null;
+  const selectedLine = selectedLineIds.length === 1
+    ? lines.find((line) => line.id === selectedLineIds[0]) ?? null
+    : null;
+  const selectedLines = selectedLineIds
+    .map((lineId) => lines.find((line) => line.id === lineId) ?? null)
+    .filter((line): line is Line => line !== null);
   const lineInfo = selectedLine ? LINE_INFO[selectedLine.name] : null;
   const selectedLineLabel = selectedLine ? getBadgeLabel(selectedLine.name) : null;
+
+  function handleLineClick(lineId: string, event: ReactMouseEvent<HTMLButtonElement>) {
+    onLineSelect(lineId, event.metaKey || event.ctrlKey);
+  }
 
   return (
     <div className="side-panel" aria-label="Line legend and line filters">
@@ -82,13 +92,13 @@ export function SidePanel({
               <button
                 key={line.id}
                 type="button"
-                className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
-                  selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
+                className={`legend-item ${selectedLineIds.includes(line.id) ? 'is-selected' : ''} ${
+                  selectedLineIds.length > 0 && !selectedLineIds.includes(line.id) ? 'is-dimmed' : ''
                 }`}
                 title={lineLabel}
                 aria-label={`${lineLabel}만 듣기`}
-                aria-pressed={selectedLineId === line.id}
-                onClick={() => onLineSelect(line.id)}
+                aria-pressed={selectedLineIds.includes(line.id)}
+                onClick={(event) => handleLineClick(line.id, event)}
               >
                 <span className="legend-badge" style={{ backgroundColor: line.color }} aria-hidden="true">
                   {lineLabel}
@@ -99,15 +109,22 @@ export function SidePanel({
         </div>
         <div className="side-panel-separator" aria-hidden="true" />
         <div className="side-panel-context" aria-live="polite">
-          <div className={`side-panel-copy ${selectedLine ? 'is-hidden' : 'is-visible'}`}>
+          <div className={`side-panel-copy ${selectedLines.length > 0 ? 'is-hidden' : 'is-visible'}`}>
             <p className="side-panel-description">{DEFAULT_DESCRIPTION}</p>
           </div>
-          <div className={`side-panel-copy ${selectedLine ? 'is-visible' : 'is-hidden'}`}>
+          <div className={`side-panel-copy ${selectedLines.length > 0 ? 'is-visible' : 'is-hidden'}`}>
             {lineInfo ? (
               <>
                 <div className="side-panel-line-name">{selectedLineLabel}</div>
                 <div className="side-panel-instrument">{lineInfo.instrument}</div>
                 <p className="side-panel-description">{lineInfo.description}</p>
+              </>
+            ) : selectedLines.length > 1 ? (
+              <>
+                <div className="side-panel-line-name">{`${selectedLines.length}개 노선 선택됨`}</div>
+                <p className="side-panel-description">
+                  {selectedLines.map((line) => getBadgeLabel(line.name)).join(' · ')}
+                </p>
               </>
             ) : null}
           </div>

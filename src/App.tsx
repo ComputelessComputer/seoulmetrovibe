@@ -15,7 +15,7 @@ function getLineBadgeLabel(lineName: string): string {
 function App() {
   const [lines, setLines] = useState<Line[]>([]);
   const [trains, setTrains] = useState<Train[]>([]);
-  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   );
@@ -154,6 +154,7 @@ function App() {
 
   const renderStates = useMemo<TrainRenderState[]>(() => renderTrains(lines, trains), [lines, trains]);
   const linesById = useMemo(() => new Map(lines.map((line) => [line.id, line])), [lines]);
+  const selectedLineIdSet = useMemo(() => new Set(selectedLineIds), [selectedLineIds]);
   useEffect(() => {
     if (renderStates.length === 0) {
       return;
@@ -177,7 +178,7 @@ function App() {
     pulsingTrains.forEach((train) => {
       handledPulseRef.current.set(train.id, train.pulseUntil);
       const line = linesById.get(train.lineId);
-      if (!line || !audioEnabled || (selectedLineId !== null && train.lineId !== selectedLineId)) {
+      if (!line || !audioEnabled || (selectedLineIdSet.size > 0 && !selectedLineIdSet.has(train.lineId))) {
         return;
       }
 
@@ -187,16 +188,24 @@ function App() {
         console.error(`Audio playback crashed for ${train.id}.`, error);
       }
     });
-  }, [audioEnabled, lines.length, linesById, renderStates, selectedLineId]);
+  }, [audioEnabled, lines.length, linesById, renderStates, selectedLineIdSet]);
 
   const legendLines = useMemo(() => lines.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')), [lines]);
 
-  function handleLineToggle(lineId: string) {
-    setSelectedLineId((current) => (current === lineId ? null : lineId));
+  function handleLineToggle(lineId: string, append = false) {
+    setSelectedLineIds((current) => {
+      if (append) {
+        return current.includes(lineId)
+          ? current.filter((id) => id !== lineId)
+          : [...current, lineId];
+      }
+
+      return current.length === 1 && current[0] === lineId ? [] : [lineId];
+    });
   }
 
   function handleLineClear() {
-    setSelectedLineId(null);
+    setSelectedLineIds([]);
   }
 
   function handleMuteToggle() {
@@ -209,7 +218,7 @@ function App() {
         lines={lines}
         onClearSelection={handleLineClear}
         onLineSelect={handleLineToggle}
-        selectedLineId={selectedLineId}
+        selectedLineIds={selectedLineIds}
         theme={themeMode}
         trains={renderStates}
       />
@@ -220,7 +229,7 @@ function App() {
         onLineSelect={handleLineToggle}
         onToggleMute={handleMuteToggle}
         muted={isMuted}
-        selectedLineId={selectedLineId}
+        selectedLineIds={selectedLineIds}
         totalTrainCount={renderStates.length}
       />
 
