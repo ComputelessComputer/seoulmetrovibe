@@ -126,7 +126,7 @@ export const LINE_DISPLAY_NAMES: Record<string, string> = {
   수인분당선: '수인분당',
   신분당선: '신분당',
   우이신설선: '우이신설',
-  GTXA: '지티엑스 에이',
+  GTXA: 'GTX-A',
 };
 
 export const LINE_COLOR_OVERRIDES: Record<string, string> = {
