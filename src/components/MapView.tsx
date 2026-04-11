@@ -15,7 +15,7 @@ interface MapViewProps {
 const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const TILE_URLS: Record<ThemeMode, string> = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light: 'https://{s}.basemaps.cartocdn.com/positron/{z}/{x}/{y}{r}.png',
+  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
 };
 const STATION_DOTS_MIN_ZOOM = 13; // only show station dots when zoomed in enough
 
