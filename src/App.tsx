@@ -246,49 +246,55 @@ function App() {
         />
       ) : (
         <BarsView
+          getBadgeLabel={getLineBadgeLabel}
           lines={legendLines}
           onLineSelect={handleLineToggle}
+          selectedLineLabel={selectedLine ? getSelectedLineLabel(selectedLine.name) : null}
           selectedLineId={selectedLineId}
+          selectedLineTrainCount={selectedLineTrainCount}
+          totalTrainCount={renderStates.length}
           trains={renderStates}
         />
       )}
 
-      <div className="side-panel" aria-label="Line legend and line filters">
-        <div className="side-panel-metric">{`${renderStates.length} TRAINS IN MOTION`}</div>
-        <div className="side-panel-grid">
-          {legendLines.map((line) => (
-            <button
-              key={line.id}
-              type="button"
-              className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
-                selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
-              }`}
-              title={line.name}
-              aria-label={`Solo ${line.name}`}
-              aria-pressed={selectedLineId === line.id}
-              onClick={() => handleLineToggle(line.id)}
-            >
-              <span
-                className="legend-badge"
-                style={{ backgroundColor: line.color }}
-                aria-hidden="true"
+      {viewMode === 'map' ? (
+        <div className="side-panel" aria-label="Line legend and line filters">
+          <div className="side-panel-metric">{`${renderStates.length} TRAINS IN MOTION`}</div>
+          <div className="side-panel-grid">
+            {legendLines.map((line) => (
+              <button
+                key={line.id}
+                type="button"
+                className={`legend-item ${selectedLineId === line.id ? 'is-selected' : ''} ${
+                  selectedLineId !== null && selectedLineId !== line.id ? 'is-dimmed' : ''
+                }`}
+                title={line.name}
+                aria-label={`Solo ${line.name}`}
+                aria-pressed={selectedLineId === line.id}
+                onClick={() => handleLineToggle(line.id)}
               >
-                {getLineBadgeLabel(line.name)}
-              </span>
-            </button>
-          ))}
+                <span
+                  className="legend-badge"
+                  style={{ backgroundColor: line.color }}
+                  aria-hidden="true"
+                >
+                  {getLineBadgeLabel(line.name)}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="side-panel-separator" aria-hidden="true" />
+          {selectedLine ? (
+            <div className="side-panel-metric" aria-live="polite">
+              {`${getSelectedLineLabel(selectedLine.name)} · ${selectedLineTrainCount} TRAINS`}
+            </div>
+          ) : (
+            <div className="side-panel-metric side-panel-metric-empty" aria-hidden="true">
+              SELECT A LINE
+            </div>
+          )}
         </div>
-        <div className="side-panel-separator" aria-hidden="true" />
-        {selectedLine ? (
-          <div className="side-panel-metric" aria-live="polite">
-            {`${getSelectedLineLabel(selectedLine.name)} · ${selectedLineTrainCount} TRAINS`}
-          </div>
-        ) : (
-          <div className="side-panel-metric side-panel-metric-empty" aria-hidden="true">
-            SELECT A LINE
-          </div>
-        )}
-      </div>
+      ) : null}
 
       <div className="bottom-center-controls">
         <div className="pill-toggle" role="tablist" aria-label="View selector">
