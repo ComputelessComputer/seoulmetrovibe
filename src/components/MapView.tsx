@@ -61,10 +61,6 @@ function getPointToSegmentDistanceSquared(point: OffsetPoint, start: OffsetPoint
   return distanceX * distanceX + distanceY * distanceY;
 }
 
-function metersPerPixel(latitude: number, zoom: number): number {
-  return (156543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom;
-}
-
 declare global {
   interface Window {
     __NAVER_MAPS_CLIENT_ID__?: string;
@@ -84,14 +80,24 @@ export function MapView({
   const mapRef = useRef<any | null>(null);
   const mapsRef = useRef<any | null>(null);
   const lineLayerRef = useRef<any[]>([]);
-  const stationLayerRef = useRef<Array<{ overlay: any; point: GeoPoint }>>([]);
-  const trainLayerRef = useRef<any[]>([]);
+  const linesRef = useRef(lines);
+  const trainCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const trainsRef = useRef(trains);
+  const selectedLineIdsRef = useRef(selectedLineIds);
+  const lineColorsRef = useRef(new Map<string, string>());
   const hasFitRef = useRef(false);
   const latestPropsRef = useRef({ lines, onClearSelection, onLineSelect });
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
   latestPropsRef.current = { lines, onClearSelection, onLineSelect };
+  trainsRef.current = trains;
+  linesRef.current = lines;
+  selectedLineIdsRef.current = selectedLineIds;
+
+  useEffect(() => {
+    lineColorsRef.current = new Map(lines.map((line) => [line.id, line.color]));
+  }, [lines]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -103,7 +109,7 @@ export function MapView({
 
     let cancelled = false;
     let clickListener: any;
-    let zoomListener: any;
+    let resizeObserver: ResizeObserver | undefined;
 
     loadNaverMaps(clientId)
       .then((maps) => {
@@ -118,15 +124,13 @@ export function MapView({
         mapsRef.current = maps;
         mapRef.current = map;
 
-        const updateStationVisibility = () => {
-          const currentMap = mapRef.current;
-          if (!currentMap) return;
-          const showStations = currentMap.getZoom() >= STATION_DOTS_MIN_ZOOM;
-          stationLayerRef.current.forEach(({ overlay, point }) => {
-            overlay.setOptions({ radius: metersPerPixel(point.lat, currentMap.getZoom()) * 1.5 });
-            overlay.setMap(showStations ? currentMap : null);
+        if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+          resizeObserver = new ResizeObserver(([entry]) => {
+            const { width, height } = entry.contentRect;
+            if (width > 0 && height > 0) map.setSize(new maps.Size(width, height));
           });
-        };
+          resizeObserver.observe(containerRef.current);
+        }
 
         clickListener = maps.Event.addListener(map, 'click', (event: any) => {
           const currentMaps = mapsRef.current;
@@ -168,7 +172,6 @@ export function MapView({
           latestPropsRef.current.onClearSelection();
         });
 
-        zoomListener = maps.Event.addListener(map, 'zoom_changed', updateStationVisibility);
         setMapReady(true);
       })
       .catch((error: unknown) => {
@@ -179,15 +182,12 @@ export function MapView({
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       const maps = mapsRef.current;
       const map = mapRef.current;
       if (maps && clickListener) maps.Event.removeListener(clickListener);
-      if (maps && zoomListener) maps.Event.removeListener(zoomListener);
-      [...lineLayerRef.current, ...stationLayerRef.current.map((item) => item.overlay), ...trainLayerRef.current]
-        .forEach((overlay) => overlay.setMap(null));
+      lineLayerRef.current.forEach((overlay) => overlay.setMap(null));
       lineLayerRef.current = [];
-      stationLayerRef.current = [];
-      trainLayerRef.current = [];
       if (map && typeof map.destroy === 'function') map.destroy();
       mapRef.current = null;
       mapsRef.current = null;
@@ -201,9 +201,7 @@ export function MapView({
     if (!mapReady || !map || !maps) return;
 
     lineLayerRef.current.forEach((overlay) => overlay.setMap(null));
-    stationLayerRef.current.forEach(({ overlay }) => overlay.setMap(null));
     lineLayerRef.current = [];
-    stationLayerRef.current = [];
 
     lines.forEach((line) => {
       const isSelected = selectedLineIds.includes(line.id);
@@ -223,20 +221,6 @@ export function MapView({
         lineLayerRef.current.push(polyline);
       });
 
-      line.stations.forEach((station) => {
-        const point = { lat: station.lat, lng: station.lng };
-        const overlay = new maps.Circle({
-          map: map.getZoom() >= STATION_DOTS_MIN_ZOOM ? map : null,
-          center: new maps.LatLng(point.lat, point.lng),
-          radius: metersPerPixel(point.lat, map.getZoom()) * 1.5,
-          fillColor: line.color,
-          fillOpacity: selectedLineIds.length > 0 && !isSelected ? 0.15 : 0.5,
-          strokeOpacity: 0,
-          clickable: false,
-          zIndex: 2,
-        });
-        stationLayerRef.current.push({ overlay, point });
-      });
     });
 
     if (!hasFitRef.current) {
@@ -250,37 +234,89 @@ export function MapView({
     }
   }, [lines, mapReady, selectedLineIds]);
 
+  // Trains move every frame, so draw them on one canvas instead of creating map markers.
   useEffect(() => {
     const map = mapRef.current;
     const maps = mapsRef.current;
-    if (!mapReady || !map || !maps) return;
+    const canvas = trainCanvasRef.current;
+    if (!mapReady || !map || !maps || !canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
 
-    trainLayerRef.current.forEach((overlay) => overlay.setMap(null));
-    trainLayerRef.current = [];
+    let frame = 0;
+    const draw = () => {
+      frame = requestAnimationFrame(draw);
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      const ratio = window.devicePixelRatio || 1;
+      if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+      }
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, width, height);
 
-    const now = Date.now();
-    trains.forEach((train) => {
-      const pulsing = train.pulseUntil > now;
-      const isDimmed = selectedLineIds.length > 0 && !selectedLineIds.includes(train.lineId);
-      const color = lines.find((line) => line.id === train.lineId)?.color ?? '#333333';
-      const size = pulsing ? 8 : 6;
-      const marker = new maps.Marker({
-        map,
-        position: new maps.LatLng(train.point.lat, train.point.lng),
-        clickable: false,
-        zIndex: 20,
-        icon: {
-          content: `<span class="train-marker${pulsing ? ' is-pulsing' : ''}${isDimmed ? ' is-dimmed' : ''}" style="--train-color: ${color}"></span>`,
-          size: new maps.Size(size, size),
-          anchor: new maps.Point(size / 2, size / 2),
-        },
+      const projection = map.getProjection();
+      const center = projection.fromCoordToOffset(map.getCenter()) as OffsetPoint;
+      const originX = center.x - width / 2;
+      const originY = center.y - height / 2;
+      const selected = selectedLineIdsRef.current;
+      const now = Date.now();
+
+      if (map.getZoom() >= STATION_DOTS_MIN_ZOOM) {
+        linesRef.current.forEach((line) => {
+          const dimmed = selected.length > 0 && !selected.includes(line.id);
+          context.globalAlpha = dimmed ? 0.15 : 0.5;
+          context.fillStyle = line.color;
+          line.stations.forEach((station) => {
+            const offset = projection.fromCoordToOffset(new maps.LatLng(station.lat, station.lng)) as OffsetPoint;
+            const x = offset.x - originX;
+            const y = offset.y - originY;
+            if (x < -4 || y < -4 || x > width + 4 || y > height + 4) return;
+            context.beginPath();
+            context.arc(x, y, 2.5, 0, Math.PI * 2);
+            context.fill();
+          });
+        });
+        context.globalAlpha = 1;
+      }
+
+      trainsRef.current.forEach((train) => {
+        const offset = projection.fromCoordToOffset(new maps.LatLng(train.point.lat, train.point.lng)) as OffsetPoint;
+        const x = offset.x - originX;
+        const y = offset.y - originY;
+        if (x < -12 || y < -12 || x > width + 12 || y > height + 12) return;
+
+        const pulsing = train.pulseUntil > now;
+        const dimmed = selected.length > 0 && !selected.includes(train.lineId);
+        const color = lineColorsRef.current.get(train.lineId) ?? '#333333';
+        const radius = pulsing ? 4 : 3;
+        context.globalAlpha = dimmed ? 0.3 : 1;
+        if (pulsing && !dimmed) {
+          context.beginPath();
+          context.arc(x, y, radius + 3, 0, Math.PI * 2);
+          context.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          context.fill();
+        }
+        context.beginPath();
+        context.arc(x, y, radius, 0, Math.PI * 2);
+        context.fillStyle = color;
+        context.fill();
+        context.lineWidth = 1;
+        context.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        context.stroke();
       });
-      trainLayerRef.current.push(marker);
-    });
-  }, [lines, mapReady, selectedLineIds, trains]);
+      context.globalAlpha = 1;
+    };
+
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+  }, [mapReady]);
 
   return (
-    <div ref={containerRef} className="map-root" data-theme={theme}>
+    <div className="map-root" data-theme={theme}>
+      <div ref={containerRef} className="map-host" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+      <canvas ref={trainCanvasRef} className="train-canvas" aria-hidden="true" />
       {mapError && <div className="map-error" role="alert">{mapError}</div>}
     </div>
   );
